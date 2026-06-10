@@ -4,16 +4,28 @@
 place (DRY) so every table reports time consistently. `enum_column` renders a
 Python Enum as a portable `VARCHAR + CHECK` constraint — SQLite has no native
 ENUM type, and storing the `.value` strings keeps the rows human-readable.
+`PrimaryKeyMixin` adds a BIGINT auto-increment `id` to every table so the
+schema is ready for PostgreSQL migration without changing row values.
 """
 
 import enum
 from datetime import datetime
 from typing import Type, TypeVar
 
-from sqlalchemy import DateTime, Enum, func
+from sqlalchemy import BigInteger, DateTime, Enum, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 E = TypeVar("E", bound=enum.Enum)
+
+
+class PrimaryKeyMixin:
+    """BIGINT auto-increment primary key named ``id``.
+
+    Use on every model so SQLite stores 64-bit integers and PostgreSQL
+    uses BIGINT — no data changes needed when migrating between the two.
+    """
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
 
 
 def enum_column(enum_cls: Type[E], **kwargs):

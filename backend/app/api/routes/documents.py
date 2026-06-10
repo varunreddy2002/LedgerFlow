@@ -30,7 +30,7 @@ from app.models.business import Business
 from app.models.document import Document
 from app.models.enums import DocumentStatus
 from app.models.transaction import Transaction
-from app.schemas.document import DocumentOut, ParseErrorDetail, UploadResponse
+from app.schemas import DocumentOut, ParseErrorDetail, UploadResponse
 from app.services import csv_parser, document_service
 
 router = APIRouter(tags=["documents"])
@@ -153,7 +153,7 @@ async def upload_document(
 
         # Mark doc processed only when parsing had no fatal errors
         if not any(e.row_number == 0 for e in result.errors):
-            doc.status = DocumentStatus.processed
+            doc.status = DocumentStatus.PROCESSED
 
         rows_imported = result.rows_imported
         rows_skipped = result.rows_skipped

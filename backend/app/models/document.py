@@ -19,31 +19,32 @@ from sqlalchemy.types import JSON
 
 from app.db.database import Base
 from app.models.enums import DocumentStatus, SourceType
-from app.models.mixins import CreatedAtMixin, enum_column
+from app.models.mixins import CreatedAtMixin, PrimaryKeyMixin, enum_column
 
 
-class Document(Base):
+class Document(Base, PrimaryKeyMixin):
     __tablename__ = "documents"
     # Same file (by content hash) can never be ingested twice for one business.
     __table_args__ = (
-        UniqueConstraint("business_id", "sha256_checksum", name="uq_document_business_checksum"),
+        UniqueConstraint(
+            "business_id", "sha256_checksum", name="uq_document_business_checksum"
+        ),
     )
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     business_id: Mapped[int] = mapped_column(
         ForeignKey("businesses.id"), index=True, nullable=False
     )
     original_filename: Mapped[str] = mapped_column(String(512), nullable=False)
     stored_filename: Mapped[str] = mapped_column(String(512), nullable=False)
     file_type: Mapped[Optional[str]] = mapped_column(String(50))
-    file_path: Mapped[str] = mapped_column(String(1024), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(512), nullable=False)
     file_size: Mapped[Optional[int]] = mapped_column(Integer)
-    sha256_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    sha256_checksum: Mapped[str] = mapped_column(String(64), nullable=False)  # exact SHA-256 hex length
     source_type: Mapped[SourceType] = enum_column(
-        SourceType, default=SourceType.unknown, nullable=False
+        SourceType, default=SourceType.UNKNOWN, nullable=False
     )
     status: Mapped[DocumentStatus] = enum_column(
-        DocumentStatus, default=DocumentStatus.uploaded, nullable=False
+        DocumentStatus, default=DocumentStatus.UPLOADED, nullable=False
     )
     uploaded_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), nullable=False
@@ -57,10 +58,9 @@ class Document(Base):
     transactions: Mapped[List["Transaction"]] = relationship(back_populates="document")
 
 
-class DocumentExtraction(Base, CreatedAtMixin):
+class DocumentExtraction(Base, PrimaryKeyMixin, CreatedAtMixin):
     __tablename__ = "document_extractions"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     document_id: Mapped[int] = mapped_column(
         ForeignKey("documents.id"), index=True, nullable=False
     )

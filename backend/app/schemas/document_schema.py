@@ -18,8 +18,8 @@ class DocumentBase(BaseModel):
     file_path: str
     file_size: Optional[int] = None
     sha256_checksum: str
-    source_type: SourceType = SourceType.unknown
-    status: DocumentStatus = DocumentStatus.uploaded
+    source_type: SourceType = SourceType.UNKNOWN
+    status: DocumentStatus = DocumentStatus.UPLOADED
 
 
 class DocumentCreate(DocumentBase):

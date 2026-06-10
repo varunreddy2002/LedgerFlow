@@ -10,6 +10,7 @@ from app.schemas.base import ORMModel
 
 class AuditLogBase(BaseModel):
     business_id: int
+    user_id: Optional[int] = None  # null for system-triggered actions
     action: str
     entity_type: Optional[str] = None
     entity_id: Optional[int] = None

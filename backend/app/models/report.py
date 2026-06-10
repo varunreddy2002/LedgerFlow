@@ -6,18 +6,17 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import Date, ForeignKey, Integer, Numeric
+from sqlalchemy import Date, ForeignKey, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import JSON
 
 from app.db.database import Base
-from app.models.mixins import CreatedAtMixin
+from app.models.mixins import CreatedAtMixin, PrimaryKeyMixin
 
 
-class PnLReport(Base, CreatedAtMixin):
+class PnLReport(Base, PrimaryKeyMixin, CreatedAtMixin):
     __tablename__ = "pnl_reports"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     business_id: Mapped[int] = mapped_column(
         ForeignKey("businesses.id"), index=True, nullable=False
     )

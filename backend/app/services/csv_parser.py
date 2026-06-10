@@ -182,7 +182,7 @@ def parse_csv(
             continue
 
         # --- derive direction from sign ---
-        direction = Direction.inflow if raw_amount > 0 else Direction.outflow
+        direction = Direction.INFLOW if raw_amount > 0 else Direction.OUTFLOW
         amount = abs(raw_amount)
 
         # --- fingerprint / dedup ---
@@ -204,8 +204,8 @@ def parse_csv(
             description_raw=description,
             amount=amount,
             direction=direction,
-            transaction_type=TransactionType.unknown,
-            review_status=ReviewStatus.needs_review,
+            transaction_type=TransactionType.UNKNOWN,
+            review_status=ReviewStatus.NEEDS_REVIEW,
             fingerprint_hash=fp,
             is_excluded_from_pnl=False,
             notes=notes,

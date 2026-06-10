@@ -32,7 +32,7 @@ from app.db.database import get_db
 from app.models.business import Business
 from app.models.enums import Direction, ReviewStatus, TransactionType
 from app.models.transaction import Transaction
-from app.schemas.transaction import TransactionOut, TransactionUpdate
+from app.schemas import TransactionOut, TransactionUpdate
 
 router = APIRouter(tags=["transactions"])
 
@@ -140,7 +140,7 @@ def transaction_summary(
         "total_inflow": float(total_inflow),
         "total_outflow": float(total_outflow),
         "net": float(total_inflow - total_outflow),
-        "needs_review_count": by_status.get(ReviewStatus.needs_review.value, 0),
+        "needs_review_count": by_status.get(ReviewStatus.NEEDS_REVIEW.value, 0),
         "by_review_status": by_status,
     }
 
@@ -192,7 +192,7 @@ def update_transaction(
         and updates["category_id"] != txn.category_id
         and "review_status" not in updates
     ):
-        updates["review_status"] = ReviewStatus.user_corrected
+        updates["review_status"] = ReviewStatus.USER_CORRECTED
 
     for attr, value in updates.items():
         setattr(txn, attr, value)

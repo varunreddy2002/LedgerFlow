@@ -1,117 +1,116 @@
 """Enumerations shared by ORM models and Pydantic schemas.
 
-Each constrained column in the spec maps to exactly one Enum here. Defining the
-allowed values once (instead of repeating string literals across models, schemas
-and validation) keeps the database CHECK constraints and the API contract in
-perfect sync. All enums subclass `str` so they serialize cleanly to JSON and
-compare equal to their plain-string values.
+Each constrained column in the spec maps to exactly one Enum here.
+All enums use StrEnum (Python 3.11+) so they:
+  - Serialize cleanly to JSON (no .value needed)
+  - Compare equal to plain strings ("inflow" == Direction.INFLOW)
+  - Follow Python naming convention: UPPERCASE members, lowercase stored values
 """
 
-import enum
+from enum import StrEnum
 
 
-class SourceType(str, enum.Enum):
-    bank_statement = "bank_statement"
-    credit_card_statement = "credit_card_statement"
-    receipt = "receipt"
-    invoice = "invoice"
-    vendor_bill = "vendor_bill"
-    payout_report = "payout_report"
-    unknown = "unknown"
+class SourceType(StrEnum):
+    BANK_STATEMENT = "bank_statement"
+    CREDIT_CARD_STATEMENT = "credit_card_statement"
+    RECEIPT = "receipt"
+    INVOICE = "invoice"
+    VENDOR_BILL = "vendor_bill"
+    PAYOUT_REPORT = "payout_report"
+    UNKNOWN = "unknown"
 
 
-class DocumentStatus(str, enum.Enum):
-    uploaded = "uploaded"
-    processing = "processing"
-    processed = "processed"
-    failed = "failed"
-    duplicate_file = "duplicate_file"
-    pending_ocr = "pending_ocr"
-    needs_review = "needs_review"
+class DocumentStatus(StrEnum):
+    UPLOADED = "uploaded"
+    PROCESSING = "processing"
+    CATEGORIZING = "categorizing"   # CSV parsed, background categorization running
+    PROCESSED = "processed"
+    FAILED = "failed"
+    DUPLICATE_FILE = "duplicate_file"
+    PENDING_OCR = "pending_ocr"
+    NEEDS_REVIEW = "needs_review"
 
 
-class AccountType(str, enum.Enum):
-    checking = "checking"
-    savings = "savings"
-    credit_card = "credit_card"
-    cash = "cash"
-    paypal = "paypal"
-    stripe = "stripe"
-    other = "other"
+class AccountType(StrEnum):
+    CHECKING = "checking"
+    SAVINGS = "savings"
+    CREDIT_CARD = "credit_card"
+    CASH = "cash"
+    PAYPAL = "paypal"
+    STRIPE = "stripe"
+    OTHER = "other"
 
 
-class CategoryType(str, enum.Enum):
-    revenue = "revenue"
-    cogs = "cogs"
-    expense = "expense"
-    equity = "equity"
-    transfer = "transfer"
-    liability = "liability"
-    asset = "asset"
-    non_pnl = "non_pnl"
+class CategoryType(StrEnum):
+    REVENUE = "revenue"
+    COGS = "cogs"
+    EXPENSE = "expense"
+    EQUITY = "equity"
+    TRANSFER = "transfer"
+    LIABILITY = "liability"
+    ASSET = "asset"
+    NON_PNL = "non_pnl"
 
 
-class Direction(str, enum.Enum):
-    inflow = "inflow"
-    outflow = "outflow"
+class Direction(StrEnum):
+    INFLOW = "inflow"
+    OUTFLOW = "outflow"
 
 
-class TransactionType(str, enum.Enum):
-    revenue = "revenue"
-    expense = "expense"
-    transfer = "transfer"
-    owner_draw = "owner_draw"
-    owner_contribution = "owner_contribution"
-    loan_payment = "loan_payment"
-    refund = "refund"
-    tax_payment = "tax_payment"
-    unknown = "unknown"
+class TransactionType(StrEnum):
+    REVENUE = "revenue"
+    EXPENSE = "expense"
+    TRANSFER = "transfer"
+    OWNER_DRAW = "owner_draw"
+    OWNER_CONTRIBUTION = "owner_contribution"
+    LOAN_PAYMENT = "loan_payment"
+    REFUND = "refund"
+    TAX_PAYMENT = "tax_payment"
+    UNKNOWN = "unknown"
 
 
-class ReviewStatus(str, enum.Enum):
-    auto_approved = "auto_approved"
-    needs_review = "needs_review"
-    user_approved = "user_approved"
-    user_corrected = "user_corrected"
-    ignored = "ignored"
+class ReviewStatus(StrEnum):
+    AUTO_APPROVED = "auto_approved"
+    NEEDS_REVIEW = "needs_review"
+    USER_APPROVED = "user_approved"
+    USER_CORRECTED = "user_corrected"
+    IGNORED = "ignored"
 
 
-class DuplicateMatchType(str, enum.Enum):
-    exact = "exact"
-    fuzzy = "fuzzy"
+class DuplicateMatchType(StrEnum):
+    EXACT = "exact"
+    FUZZY = "fuzzy"
 
 
-class DuplicateStatus(str, enum.Enum):
-    pending_review = "pending_review"
-    confirmed_duplicate = "confirmed_duplicate"
-    rejected_duplicate = "rejected_duplicate"
-    auto_confirmed = "auto_confirmed"
+class DuplicateGroupStatus(StrEnum):
+    PENDING_REVIEW = "pending_review"
+    RESOLVED = "resolved"
 
 
-class ResolvedAction(str, enum.Enum):
-    keep_both = "keep_both"
-    exclude_transaction_1 = "exclude_transaction_1"
-    exclude_transaction_2 = "exclude_transaction_2"
+class DuplicateResolution(StrEnum):
+    KEEP_ONE = "keep_one"        # confirmed duplicates — kept the primary, excluded rest
+    KEEP_ALL = "keep_all"        # decided they are NOT duplicates — all transactions kept
+    EXCLUDE_ALL = "exclude_all"  # all transactions excluded (edge case)
 
 
-class ReviewIssueType(str, enum.Enum):
-    low_confidence_category = "low_confidence_category"
-    possible_duplicate = "possible_duplicate"
-    possible_transfer = "possible_transfer"
-    possible_personal_expense = "possible_personal_expense"
-    large_transaction = "large_transaction"
-    missing_vendor = "missing_vendor"
-    missing_customer = "missing_customer"
-    unclear_cogs_or_expense = "unclear_cogs_or_expense"
-    uncategorized = "uncategorized"
+class ReviewIssueType(StrEnum):
+    LOW_CONFIDENCE_CATEGORY = "low_confidence_category"
+    POSSIBLE_DUPLICATE = "possible_duplicate"
+    POSSIBLE_TRANSFER = "possible_transfer"
+    POSSIBLE_PERSONAL_EXPENSE = "possible_personal_expense"
+    LARGE_TRANSACTION = "large_transaction"
+    MISSING_VENDOR = "missing_vendor"
+    MISSING_CUSTOMER = "missing_customer"
+    UNCLEAR_COGS_OR_EXPENSE = "unclear_cogs_or_expense"
+    UNCATEGORIZED = "uncategorized"
 
 
-class ReviewItemStatus(str, enum.Enum):
-    open = "open"
-    resolved = "resolved"
-    dismissed = "dismissed"
+class ReviewItemStatus(StrEnum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+    DISMISSED = "dismissed"
 
 
-class ChatRole(str, enum.Enum):
-    user = "user"
-    bot = "bot"
+class ChatRole(StrEnum):
+    USER = "user"
+    BOT = "bot"

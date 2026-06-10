@@ -27,6 +27,7 @@ class ChatSessionOut(ORMModel, ChatSessionBase):
 # --- ChatMessage ----------------------------------------------------------
 class ChatMessageBase(BaseModel):
     session_id: int
+    user_id: Optional[int] = None  # null for bot messages
     role: ChatRole
     message: str
     metadata_json: Optional[Any] = None

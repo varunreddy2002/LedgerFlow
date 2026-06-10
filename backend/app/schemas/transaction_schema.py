@@ -1,4 +1,4 @@
-"""Schemas for transactions, duplicate candidates, review items and rules."""
+"""Schemas for transactions, duplicate groups, review items and categorization rules."""
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -8,9 +8,9 @@ from pydantic import BaseModel
 
 from app.models.enums import (
     Direction,
+    DuplicateGroupStatus,
     DuplicateMatchType,
-    DuplicateStatus,
-    ResolvedAction,
+    DuplicateResolution,
     ReviewIssueType,
     ReviewItemStatus,
     ReviewStatus,
@@ -34,9 +34,9 @@ class TransactionBase(BaseModel):
     category_id: Optional[int] = None
     customer_id: Optional[int] = None
     vendor_id: Optional[int] = None
-    transaction_type: TransactionType = TransactionType.unknown
+    transaction_type: TransactionType = TransactionType.UNKNOWN
     confidence_score: Optional[float] = None
-    review_status: ReviewStatus = ReviewStatus.needs_review
+    review_status: ReviewStatus = ReviewStatus.NEEDS_REVIEW
     fingerprint_hash: Optional[str] = None
     is_excluded_from_pnl: bool = False
     exclusion_reason: Optional[str] = None
@@ -66,24 +66,42 @@ class TransactionOut(ORMModel, TransactionBase):
     updated_at: datetime
 
 
-# --- DuplicateCandidate ---------------------------------------------------
-class DuplicateCandidateBase(BaseModel):
+# --- DuplicateGroup -------------------------------------------------------
+class DuplicateGroupBase(BaseModel):
     business_id: int
-    transaction_id_1: int
-    transaction_id_2: int
+    fingerprint_hash: str
     match_type: DuplicateMatchType
     match_score: Optional[float] = None
-    reason: Optional[str] = None
-    status: DuplicateStatus = DuplicateStatus.pending_review
-    resolved_action: Optional[ResolvedAction] = None
+    status: DuplicateGroupStatus = DuplicateGroupStatus.PENDING_REVIEW
+    resolution: Optional[DuplicateResolution] = None
     resolved_at: Optional[datetime] = None
+    resolved_by_user_id: Optional[int] = None
+    notes: Optional[str] = None
 
 
-class DuplicateCandidateCreate(DuplicateCandidateBase):
+class DuplicateGroupCreate(DuplicateGroupBase):
     pass
 
 
-class DuplicateCandidateOut(ORMModel, DuplicateCandidateBase):
+class DuplicateGroupOut(ORMModel, DuplicateGroupBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+# --- DuplicateGroupMember -------------------------------------------------
+class DuplicateGroupMemberBase(BaseModel):
+    group_id: int
+    transaction_id: int
+    is_primary: bool = False
+    is_kept: Optional[bool] = None  # null=unresolved, True=keep, False=exclude
+
+
+class DuplicateGroupMemberCreate(DuplicateGroupMemberBase):
+    pass
+
+
+class DuplicateGroupMemberOut(ORMModel, DuplicateGroupMemberBase):
     id: int
     created_at: datetime
 
@@ -92,11 +110,13 @@ class DuplicateCandidateOut(ORMModel, DuplicateCandidateBase):
 class ReviewItemBase(BaseModel):
     business_id: int
     transaction_id: Optional[int] = None
+    duplicate_group_id: Optional[int] = None
     issue_type: ReviewIssueType
     question: Optional[str] = None
     suggested_action: Optional[str] = None
-    status: ReviewItemStatus = ReviewItemStatus.open
+    status: ReviewItemStatus = ReviewItemStatus.OPEN
     resolved_at: Optional[datetime] = None
+    resolved_by_user_id: Optional[int] = None
 
 
 class ReviewItemCreate(ReviewItemBase):

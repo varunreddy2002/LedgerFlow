@@ -90,7 +90,7 @@ def create_document(
       .pdf  → ``pending_ocr`` (async OCR pipeline, not yet implemented)
     """
     ext = file_ext.lower().lstrip(".")
-    status = DocumentStatus.uploaded if ext == "csv" else DocumentStatus.pending_ocr
+    status = DocumentStatus.UPLOADED if ext == "csv" else DocumentStatus.PENDING_OCR
 
     doc = Document(
         business_id=business_id,
@@ -100,7 +100,7 @@ def create_document(
         file_size=file_size,
         sha256_checksum=checksum,
         file_type=ext,
-        source_type=SourceType.unknown,
+        source_type=SourceType.UNKNOWN,
         status=status,
     )
     db.add(doc)
