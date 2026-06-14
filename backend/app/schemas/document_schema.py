@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.models.enums import DocumentStatus, SourceType
 from app.schemas.base import ORMModel
@@ -56,6 +56,8 @@ class UploadResponse(BaseModel):
 
 # --- DocumentExtraction ---------------------------------------------------
 class DocumentExtractionBase(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     document_id: int
     extraction_type: Optional[str] = None
     raw_text: Optional[str] = None

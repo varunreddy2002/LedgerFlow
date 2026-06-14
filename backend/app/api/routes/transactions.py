@@ -21,7 +21,6 @@ PATCH behaviour
 """
 
 from datetime import date
-from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -33,6 +32,9 @@ from app.models.business import Business
 from app.models.enums import Direction, ReviewStatus, TransactionType
 from app.models.transaction import Transaction
 from app.schemas import TransactionOut, TransactionUpdate
+from app.services.transaction_service import TransactionService
+
+_txn_service = TransactionService()
 
 router = APIRouter(tags=["transactions"])
 
@@ -110,39 +112,9 @@ def transaction_summary(
     }
     ```
     """
-    q = db.query(Transaction).filter(
-        Transaction.business_id == business_id,
-        Transaction.is_excluded_from_pnl == False,  # noqa: E712
+    return _txn_service.get_summary(
+        db, business_id, start_date=start_date, end_date=end_date
     )
-    if start_date is not None:
-        q = q.filter(Transaction.transaction_date >= start_date)
-    if end_date is not None:
-        q = q.filter(Transaction.transaction_date <= end_date)
-
-    transactions = q.all()
-
-    total_inflow: Decimal = sum(
-        (t.amount for t in transactions if t.direction == Direction.inflow),
-        Decimal("0"),
-    )
-    total_outflow: Decimal = sum(
-        (t.amount for t in transactions if t.direction == Direction.outflow),
-        Decimal("0"),
-    )
-
-    by_status: dict[str, int] = {}
-    for t in transactions:
-        key = t.review_status.value
-        by_status[key] = by_status.get(key, 0) + 1
-
-    return {
-        "total_count": len(transactions),
-        "total_inflow": float(total_inflow),
-        "total_outflow": float(total_outflow),
-        "net": float(total_inflow - total_outflow),
-        "needs_review_count": by_status.get(ReviewStatus.NEEDS_REVIEW.value, 0),
-        "by_review_status": by_status,
-    }
 
 
 # ---------------------------------------------------------------------------

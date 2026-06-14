@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>LedgerFlow — Database Schema</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f1117;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 32px;
+    }
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      color: #94a3b8;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+    .mermaid {
+      background: #1e2330;
+      border-radius: 12px;
+      padding: 32px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>LedgerFlow — Database Schema</h1>
+  <div class="mermaid">
+erDiagram
+    businesses {
+        bigint id PK
+        varchar name
+        varchar business_type
+        varchar currency
+        datetime created_at
+        datetime updated_at
+    }
+
+    users {
+        bigint id PK
+        bigint business_id FK
+        varchar name
+        varchar email
+        bool is_active
+        datetime created_at
+        datetime updated_at
+    }
+
+    accounts {
+        bigint id PK
+        bigint business_id FK
+        varchar account_name
+        varchar account_type
+        varchar institution_name
+        varchar last_four
+        varchar currency
+        datetime created_at
+    }
+
+    categories {
+        bigint id PK
+        bigint business_id FK
+        bigint parent_category_id FK
+        varchar name
+        varchar category_type
+        bool is_system
+        datetime created_at
+    }
+
+    vendors {
+        bigint id PK
+        bigint business_id FK
+        bigint default_category_id FK
+        varchar name
+        varchar normalized_name
+        varchar vendor_type
+        datetime created_at
+    }
+
+    customers {
+        bigint id PK
+        bigint business_id FK
+        varchar name
+        varchar normalized_name
+        varchar source
+        datetime created_at
+    }
+
+    documents {
+        bigint id PK
+        bigint business_id FK
+        varchar original_filename
+        varchar stored_filename
+        varchar file_type
+        varchar file_path
+        int file_size
+        varchar sha256_checksum UK
+        varchar source_type
+        varchar status
+        datetime uploaded_at
+        datetime processed_at
+    }
+
+    document_extractions {
+        bigint id PK
+        bigint document_id FK
+        varchar extraction_type
+        text raw_text
+        json extracted_json
+        varchar model_used
+        float confidence_score
+        datetime created_at
+    }
+
+    transactions {
+        bigint id PK
+        bigint business_id FK
+        bigint document_id FK
+        bigint account_id FK
+        bigint category_id FK
+        bigint vendor_id FK
+        bigint customer_id FK
+        date transaction_date
+        date posted_date
+        varchar description_raw
+        varchar description_clean
+        varchar merchant_name
+        numeric amount
+        varchar direction
+        varchar transaction_type
+        float confidence_score
+        varchar review_status
+        varchar fingerprint_hash
+        bool is_excluded_from_pnl
+        varchar exclusion_reason
+        text notes
+        datetime created_at
+        datetime updated_at
+    }
+
+    duplicate_groups {
+        bigint id PK
+        bigint business_id FK
+        bigint resolved_by_user_id FK
+        varchar fingerprint_hash
+        varchar match_type
+        float match_score
+        varchar status
+        varchar resolution
+        datetime resolved_at
+        text notes
+        datetime created_at
+        datetime updated_at
+    }
+
+    duplicate_group_members {
+        bigint id PK
+        bigint group_id FK
+        bigint transaction_id FK "UNIQUE"
+        bool is_primary
+        bool is_kept
+        datetime created_at
+    }
+
+    review_items {
+        bigint id PK
+        bigint business_id FK
+        bigint transaction_id FK
+        bigint duplicate_group_id FK
+        bigint resolved_by_user_id FK
+        varchar issue_type
+        text question
+        text suggested_action
+        varchar status
+        datetime resolved_at
+        datetime created_at
+    }
+
+    categorization_rules {
+        bigint id PK
+        bigint business_id FK
+        bigint category_id FK
+        varchar merchant_pattern
+        varchar transaction_type
+        float confidence_boost
+        datetime created_at
+    }
+
+    audit_logs {
+        bigint id PK
+        bigint business_id FK
+        bigint user_id FK
+        varchar action
+        varchar entity_type
+        int entity_id
+        json old_value
+        json new_value
+        datetime created_at
+    }
+
+    chat_sessions {
+        bigint id PK
+        bigint business_id FK
+        varchar title
+        datetime created_at
+    }
+
+    chat_messages {
+        bigint id PK
+        bigint session_id FK
+        bigint user_id FK
+        varchar role
+        text message
+        json metadata_json
+        datetime created_at
+    }
+
+    pnl_reports {
+        bigint id PK
+        bigint business_id FK
+        date period_start
+        date period_end
+        numeric revenue_total
+        numeric cogs_total
+        numeric gross_profit
+        numeric operating_expenses_total
+        numeric net_profit
+        json report_json
+        datetime created_at
+    }
+
+    businesses ||--o{ users : "has"
+    businesses ||--o{ accounts : "has"
+    businesses ||--o{ categories : "has"
+    businesses ||--o{ vendors : "has"
+    businesses ||--o{ customers : "has"
+    businesses ||--o{ documents : "uploads"
+    businesses ||--o{ transactions : "owns"
+    businesses ||--o{ duplicate_groups : "has"
+    businesses ||--o{ review_items : "has"
+    businesses ||--o{ categorization_rules : "defines"
+    businesses ||--o{ audit_logs : "logs"
+    businesses ||--o{ chat_sessions : "has"
+    businesses ||--o{ pnl_reports : "generates"
+
+    categories ||--o{ categories : "parent of"
+    accounts ||--o{ transactions : "holds"
+    documents ||--o{ transactions : "source of"
+    categories ||--o{ transactions : "classifies"
+    vendors ||--o{ transactions : "billed by"
+    customers ||--o{ transactions : "paid by"
+    categories ||--o{ vendors : "default for"
+    categories ||--o{ categorization_rules : "targets"
+    documents ||--o{ document_extractions : "produces"
+
+    transactions ||--o| duplicate_group_members : "member of"
+    duplicate_groups ||--|{ duplicate_group_members : "contains"
+    users ||--o{ duplicate_groups : "resolves"
+
+    transactions ||--o{ review_items : "flagged in"
+    duplicate_groups ||--o{ review_items : "flagged in"
+    users ||--o{ review_items : "resolves"
+
+    users ||--o{ audit_logs : "triggers"
+    users ||--o{ chat_messages : "sends"
+    chat_sessions ||--|{ chat_messages : "contains"
+  </div>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "dark",
+      er: {
+        diagramPadding: 40,
+        layoutDirection: "TB",
+        minEntityWidth: 100,
+        minEntityHeight: 75,
+        entityPadding: 15,
+        useMaxWidth: true,
+      },
+    });
+  </script>
+</body>
+</html>

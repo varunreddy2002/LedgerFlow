@@ -1,46 +1,27 @@
-"""Document upload and retrieval endpoints.
-
-Routes
-------
-GET  /api/businesses/{business_id}/documents
-POST /api/businesses/{business_id}/documents/upload
-GET  /api/documents/{document_id}
-
-Upload flow
------------
-1. Validate file extension (.csv or .pdf only).
-2. Read file into memory and compute SHA-256 checksum.
-3. Check for duplicate file (same business + same checksum).
-   → If duplicate: return existing document info without storing again.
-4. Save file to  uploads/{business_id}/{uuid}.{ext}
-5. Create ``documents`` row (flushed so doc.id is available).
-6. If CSV: parse rows → Transaction rows → bulk insert → mark doc processed.
-   If PDF:  leave status as pending_ocr (OCR pipeline not yet built).
-7. Commit and return UploadResponse with parse summary.
-"""
+"""Document upload and retrieval endpoints."""
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.routes.businesses import get_business_or_404
 from app.db.database import get_db
-from app.models.business import Business
+from app.models.business import Account, Business
 from app.models.document import Document
 from app.models.enums import DocumentStatus
-from app.models.transaction import Transaction
 from app.schemas import DocumentOut, ParseErrorDetail, UploadResponse
-from app.services import csv_parser, document_service
+from app.services import csv_parser
+from app.services.categorization_service import categorize_transactions
+from app.services.document_service import DocumentService
+from app.services.ocr_service import process_pdf_document
 
 router = APIRouter(tags=["documents"])
 
 ALLOWED_EXTENSIONS: set[str] = {".csv", ".pdf"}
 
+_doc_service = DocumentService()
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
 
 @router.get("/businesses/{business_id}/documents", response_model=list[DocumentOut])
 def list_documents(
@@ -48,7 +29,6 @@ def list_documents(
     db: Session = Depends(get_db),
     _: Business = Depends(get_business_or_404),
 ):
-    """List all uploaded documents for a business, newest first."""
     return (
         db.query(Document)
         .filter(Document.business_id == business_id)
@@ -72,18 +52,11 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
 )
 async def upload_document(
     business_id: int,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     _: Business = Depends(get_business_or_404),
 ):
-    """Upload a CSV or PDF financial file for a business.
-
-    - CSV files are parsed immediately; transactions are created in the same request.
-    - PDF files are stored and marked ``pending_ocr`` (pipeline not yet active).
-    - Uploading the same file twice returns the existing document without
-      creating duplicates (checked via SHA-256 checksum).
-    """
-    # --- Extension check ---------------------------------------------------
     filename = file.filename or ""
     ext = Path(filename).suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -92,11 +65,9 @@ async def upload_document(
             detail=f"Unsupported file type '{ext}'. Please upload a .csv or .pdf file.",
         )
 
-    # --- Read + checksum ---------------------------------------------------
-    content, checksum = await document_service.read_and_checksum(file)
+    content, checksum = await _doc_service.read_and_checksum(file)
 
-    # --- Duplicate file guard ----------------------------------------------
-    existing = document_service.get_by_checksum(db, business_id, checksum)
+    existing = _doc_service.get_by_checksum(db, business_id, checksum)
     if existing:
         return UploadResponse(
             document=DocumentOut.model_validate(existing),
@@ -109,11 +80,9 @@ async def upload_document(
             ),
         )
 
-    # --- Save to disk ------------------------------------------------------
-    stored_filename, file_path = document_service.save_to_disk(content, business_id, filename)
+    stored_filename, file_path = _doc_service.save_to_disk(content, business_id, filename)
 
-    # --- Create document row (flushed, not committed yet) ------------------
-    doc = document_service.create_document(
+    doc = _doc_service.create_document(
         db,
         business_id=business_id,
         original_filename=filename,
@@ -124,20 +93,19 @@ async def upload_document(
         file_ext=ext,
     )
 
-    # --- CSV parsing -------------------------------------------------------
     rows_imported = 0
     rows_skipped = 0
     dup_txns = 0
     parse_errors: list[ParseErrorDetail] = []
 
     if ext == ".csv":
-        # Collect fingerprints already in DB for this business so re-uploads
-        # of individual rows are caught even across different files.
-        existing_fps: set[str] = {
-            fp
-            for (fp,) in db.query(Transaction.fingerprint_hash).filter(
-                Transaction.business_id == business_id,
-                Transaction.fingerprint_hash.isnot(None),
+        existing_fps = _doc_service.get_existing_fingerprints(db, business_id)
+
+        account_map: dict[str, int] = {
+            acct.institution_name.lower(): acct.id
+            for acct in db.query(Account).filter(
+                Account.business_id == business_id,
+                Account.institution_name.isnot(None),
             )
         }
 
@@ -146,36 +114,36 @@ async def upload_document(
             business_id=business_id,
             document_id=doc.id,
             existing_fingerprints=existing_fps,
+            account_map=account_map,
         )
 
         if result.transactions:
             db.add_all(result.transactions)
 
-        # Mark doc processed only when parsing had no fatal errors
-        if not any(e.row_number == 0 for e in result.errors):
-            doc.status = DocumentStatus.PROCESSED
+        _doc_service.apply_csv_status(doc, result)
 
         rows_imported = result.rows_imported
         rows_skipped = result.rows_skipped
         dup_txns = result.duplicate_fingerprints
         parse_errors = [
-            ParseErrorDetail(
-                row_number=e.row_number,
-                reason=e.reason,
-                raw_value=e.raw_value,
-            )
+            ParseErrorDetail(row_number=e.row_number, reason=e.reason, raw_value=e.raw_value)
             for e in result.errors
         ]
 
-    # --- Commit everything -------------------------------------------------
     db.commit()
     db.refresh(doc)
+
+    if ext == ".csv" and doc.status == DocumentStatus.CATEGORIZING:
+        background_tasks.add_task(categorize_transactions, business_id, doc.id)
+
+    if ext == ".pdf":
+        background_tasks.add_task(process_pdf_document, business_id, doc.id)
 
     msg = (
         f"File uploaded and parsed: {rows_imported} transactions imported, "
         f"{rows_skipped} rows skipped."
         if ext == ".csv"
-        else "File uploaded. PDF is queued for OCR processing."
+        else "File uploaded. PDF queued for OCR — transactions will appear shortly."
     )
 
     return UploadResponse(

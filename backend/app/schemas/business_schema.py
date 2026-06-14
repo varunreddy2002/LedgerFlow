@@ -28,7 +28,6 @@ class BusinessOut(ORMModel, BusinessBase):
 
 # --- Account --------------------------------------------------------------
 class AccountBase(BaseModel):
-    business_id: int
     account_name: str
     account_type: AccountType
     institution_name: Optional[str] = None
@@ -42,6 +41,7 @@ class AccountCreate(AccountBase):
 
 class AccountOut(ORMModel, AccountBase):
     id: int
+    business_id: int
     created_at: datetime
 
 

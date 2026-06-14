@@ -1,10 +1,4 @@
 """Enumerations shared by ORM models and Pydantic schemas.
-
-Each constrained column in the spec maps to exactly one Enum here.
-All enums use StrEnum (Python 3.11+) so they:
-  - Serialize cleanly to JSON (no .value needed)
-  - Compare equal to plain strings ("inflow" == Direction.INFLOW)
-  - Follow Python naming convention: UPPERCASE members, lowercase stored values
 """
 
 from enum import StrEnum

@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.models.business import Business
 from app.schemas import BusinessCreate, BusinessOut
+from app.services.seeding_service import seed_business_defaults
 
 router = APIRouter(prefix="/businesses", tags=["businesses"])
 
@@ -58,3 +59,18 @@ def create_business(payload: BusinessCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(biz)
     return biz
+
+
+@router.post("/{business_id}/setup", status_code=status.HTTP_200_OK)
+def setup_business_defaults(
+    business: Business = Depends(get_business_or_404),
+    db: Session = Depends(get_db),
+):
+    """Seed default categories and generic categorization rules for a business.
+
+    Call this once after creating a business and configuring accounts.
+    Safe to call multiple times — skips anything already seeded.
+    """
+    seed_business_defaults(db, business.id)
+    db.commit()
+    return {"message": f"Default categories and rules seeded for business '{business.name}'."}
