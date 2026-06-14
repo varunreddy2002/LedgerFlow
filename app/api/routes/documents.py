@@ -7,14 +7,17 @@ from sqlalchemy.orm import Session
 
 from app.api.routes.businesses import get_business_or_404
 from app.db.database import get_db
-from app.models.business import Account, Business
+from app.models.business import Business
 from app.models.document import Document
 from app.models.enums import DocumentStatus
 from app.schemas import DocumentOut, ParseErrorDetail, UploadResponse
 from app.services import csv_parser
 from app.services.categorization_service import categorize_transactions
 from app.services.document_service import DocumentService
-from app.services.ocr_service import process_pdf_document
+
+# TODO(ocr): OCR service was removed and is being rebuilt. PDF uploads are
+# stored with status PENDING_OCR but not processed until this is restored.
+# from app.services.ocr_service import process_pdf_document
 
 router = APIRouter(tags=["documents"])
 
@@ -101,20 +104,11 @@ async def upload_document(
     if ext == ".csv":
         existing_fps = _doc_service.get_existing_fingerprints(db, business_id)
 
-        account_map: dict[str, int] = {
-            acct.institution_name.lower(): acct.id
-            for acct in db.query(Account).filter(
-                Account.business_id == business_id,
-                Account.institution_name.isnot(None),
-            )
-        }
-
         result = csv_parser.parse_csv(
             file_content=content,
             business_id=business_id,
             document_id=doc.id,
             existing_fingerprints=existing_fps,
-            account_map=account_map,
         )
 
         if result.transactions:
@@ -136,8 +130,9 @@ async def upload_document(
     if ext == ".csv" and doc.status == DocumentStatus.CATEGORIZING:
         background_tasks.add_task(categorize_transactions, business_id, doc.id)
 
-    if ext == ".pdf":
-        background_tasks.add_task(process_pdf_document, business_id, doc.id)
+    # TODO(ocr): re-enable once the OCR service is rebuilt.
+    # if ext == ".pdf":
+    #     background_tasks.add_task(process_pdf_document, business_id, doc.id)
 
     msg = (
         f"File uploaded and parsed: {rows_imported} transactions imported, "

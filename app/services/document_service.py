@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.models.document import Document
 from app.models.enums import DocumentStatus, SourceType
 from app.models.transaction import Transaction
-from app.services.parsers.base import ParseResult
+from app.services.csv_parser import ParseResult
 
 
 class DocumentService:

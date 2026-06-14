@@ -19,9 +19,24 @@ class Settings(BaseSettings):
     # On expiry the engine reloads rules from the DB on next use.
     rule_cache_ttl_seconds: int = 300  # 5 minutes
 
-    # vLLM OCR endpoint (RunPod / any OpenAI-compatible server)
+    # OCR — vLLM (RunPod or EC2, OpenAI-compatible)
+    ocr_provider: str = "vllm"
     vllm_base_url: str = ""
     vllm_api_key: str = ""
+    vllm_model: str = "h2oai/h2ovl-mississippi-800m"
+
+    # Chat — which provider to use ("bedrock" or "openai")
+    chat_provider: str = "bedrock"
+    default_chat_model: str = "anthropic.claude-sonnet-4-6-20251001-v1:0"
+
+    # Embedding — which provider to use ("bedrock")
+    embedding_provider: str = "bedrock"
+    embedding_model: str = "amazon.titan-embed-text-v2:0"
+
+    # AWS — used by Bedrock (chat + embedding)
+    aws_region: str = "us-east-1"
+    aws_access_key_id: str = ""
+    aws_secret_access_key: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
