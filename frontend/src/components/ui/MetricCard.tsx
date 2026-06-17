@@ -1,0 +1,16 @@
+interface MetricCardProps {
+  label: string
+  value: string | number
+  valueClassName?: string
+  sub?: string
+}
+
+export function MetricCard({ label, value, valueClassName = '', sub }: MetricCardProps) {
+  return (
+    <div className="rounded-lg bg-gray-50 p-4 ring-1 ring-inset ring-gray-100">
+      <p className="text-xs font-medium uppercase tracking-wide text-gray-500">{label}</p>
+      <p className={`mt-1 text-2xl font-semibold text-gray-900 ${valueClassName}`}>{value}</p>
+      {sub && <p className="mt-0.5 text-xs text-gray-400">{sub}</p>}
+    </div>
+  )
+}

@@ -60,6 +60,7 @@ class TransactionType(StrEnum):
     LOAN_PAYMENT = "loan_payment"
     REFUND = "refund"
     TAX_PAYMENT = "tax_payment"
+    TAX_COLLECTED = "tax_collected"
     UNKNOWN = "unknown"
 
 

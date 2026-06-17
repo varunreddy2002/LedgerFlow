@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
-
+import os
+import dotenv
 
 class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/ledgerflow"
@@ -23,11 +24,11 @@ class Settings(BaseSettings):
     ocr_provider: str = "vllm"
     vllm_base_url: str = ""
     vllm_api_key: str = ""
-    vllm_model: str = "h2oai/h2ovl-mississippi-800m"
+    ocr_model: str = "h2oai/h2ovl-mississippi-800m"
 
     # Chat — which provider to use ("bedrock" or "openai")
     chat_provider: str = "bedrock"
-    default_chat_model: str = "anthropic.claude-sonnet-4-6-20251001-v1:0"
+    default_chat_model: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 
     # Embedding — which provider to use ("bedrock")
     embedding_provider: str = "bedrock"
@@ -35,8 +36,7 @@ class Settings(BaseSettings):
 
     # AWS — used by Bedrock (chat + embedding)
     aws_region: str = "us-east-1"
-    aws_access_key_id: str = ""
-    aws_secret_access_key: str = ""
+    aws_api_key: str = os.environ.get("AWS_API_KEY", "")
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

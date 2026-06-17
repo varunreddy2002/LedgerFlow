@@ -597,7 +597,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ledgerflow-backend"
+name = "ledgerflow"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

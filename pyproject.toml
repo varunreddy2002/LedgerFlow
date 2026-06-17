@@ -1,7 +1,7 @@
 [project]
-name = "ledgerflow-backend"
+name = "ledgerflow"
 version = "0.1.0"
-description = "LedgerFlow backend — CSV/PDF ingestion, categorization, and review API."
+description = "LedgerFlow — CSV/PDF ingestion, categorization, and review API."
 requires-python = ">=3.11"
 dependencies = [
     # Web framework

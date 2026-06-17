@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from sqlalchemy import (
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -50,6 +51,9 @@ class Document(Base, PrimaryKeyMixin):
         DateTime, server_default=func.now(), nullable=False
     )
     processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    invoice_number: Mapped[Optional[str]] = mapped_column(String(100))
+    invoice_date: Mapped[Optional[date]] = mapped_column(Date)
+    due_date: Mapped[Optional[date]] = mapped_column(Date)
 
     business: Mapped["Business"] = relationship(back_populates="documents")
     extractions: Mapped[List["DocumentExtraction"]] = relationship(
