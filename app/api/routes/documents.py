@@ -14,10 +14,7 @@ from app.schemas import DocumentOut, ParseErrorDetail, UploadResponse
 from app.services import csv_parser
 from app.services.categorization_service import categorize_transactions
 from app.services.document_service import DocumentService
-from app.services.ocr_service import OCRService
-# TODO(ocr): OCR service was removed and is being rebuilt. PDF uploads are
-# stored with status PENDING_OCR but not processed until this is restored.
-# from app.services.ocr_service import process_pdf_document
+from app.services.ocr_service import process_pdf_document
 
 router = APIRouter(tags=["documents"])
 
@@ -130,10 +127,8 @@ async def upload_document(
     if ext == ".csv" and doc.status == DocumentStatus.CATEGORIZING:
         background_tasks.add_task(categorize_transactions, business_id, doc.id)
 
-    # TODO(ocr): re-enable once the OCR service is rebuilt.
     if ext == ".pdf":
-        ocr_service = OCRService()
-        background_tasks.add_task(ocr_service.ocr_extract(file), business_id, doc.id)
+        background_tasks.add_task(process_pdf_document, doc.id, business_id)
 
 
     msg = (

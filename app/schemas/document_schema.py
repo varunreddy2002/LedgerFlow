@@ -1,6 +1,6 @@
 """Schemas for documents and their extractions."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -30,6 +30,9 @@ class DocumentOut(ORMModel, DocumentBase):
     id: int
     uploaded_at: datetime
     processed_at: Optional[datetime] = None
+    invoice_number: Optional[str] = None
+    invoice_date: Optional[date] = None
+    due_date: Optional[date] = None
 
 
 # --- Upload response ------------------------------------------------------

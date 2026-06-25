@@ -83,6 +83,7 @@ class DocumentService:
         """
         ext = file_ext.lower().lstrip(".")
         status = DocumentStatus.UPLOADED if ext == "csv" else DocumentStatus.PENDING_OCR
+        source_type = SourceType.BANK_STATEMENT if ext == "csv" else SourceType.UNKNOWN
 
         doc = Document(
             business_id=business_id,
@@ -92,7 +93,7 @@ class DocumentService:
             file_size=file_size,
             sha256_checksum=checksum,
             file_type=ext,
-            source_type=SourceType.UNKNOWN,
+            source_type=source_type,
             status=status,
         )
         db.add(doc)

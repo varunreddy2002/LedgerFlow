@@ -1,7 +1,9 @@
-"""Quick OCR test — 2-pass technique for h2oai/h2ovl-mississippi-800m.
+"""PDF full-content extraction test — h2oai/h2ovl-mississippi models.
 
-Pass 1: discover the exact table column headers from the image.
-Pass 2: use those headers (with an explicit key mapping) to extract invoice data.
+Processes a PDF page by page, sends each page as an image to the configured
+vLLM endpoint, and captures the raw model output.
+
+Results are saved to outputs/<model_label>_<timestamp>.json
 
 Usage:
     python scripts/test_ocr_pdf.py
@@ -9,199 +11,128 @@ Usage:
 
 import base64
 import json
-import re
+import os
+import time
+from datetime import datetime
 
 import fitz
 import requests
 
 # ---------------------------------------------------------------------------
-# Config
+# Config — change MODEL + VLLM_URL when switching between 800m and 2b
 # ---------------------------------------------------------------------------
-VLLM_URL = "https://zs7wv74zphqchq-8000.proxy.runpod.net"
-VLLM_KEY  = "sk-zs7wv74zphqchq"
-MODEL     = "h2oai/h2ovl-mississippi-800m"
-DOC_PATH  = r"C:\Users\varun\Downloads\invoice_101_charspace_102.pdf"
-#DOC_PATH = r"C:\Users\varun\Downloads\invoice_9caf94ce_3.pdf"
-# ---------------------------------------------------------------------------
-
-HEADERS_HTTP = {"Authorization": f"Bearer {VLLM_KEY}"}
+VLLM_URL = "http://ec2-3-83-32-175.compute-1.amazonaws.com:8000"
+MODEL     = "h2oai/h2ovl-mississippi-2b"
+DOC_PATH  = r"C:\Users\varun\Downloads\Pup Jt - PO.pdf"
+OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "output")
 
 # ---------------------------------------------------------------------------
-# Heuristic mapper: discovered header → schema key
-# Add more synonyms as you encounter new vendors.
+# Extraction prompt
 # ---------------------------------------------------------------------------
-_HEADER_SYNONYMS: dict[str, str] = {
-    # description
-    "description": "description",
-    "item description": "description",
-    "item": "description",
-    "particulars": "description",
-    "product": "description",
-    "service": "description",
-    "details": "description",
-    "narration": "description",
-    # quantity
-    "qty": "quantity",
-    "quantity": "quantity",
-    "units": "quantity",
-    "no": "quantity",
-    "nos": "quantity",
-    "pcs": "quantity",
-    "count": "quantity",
-    # unit
-    "unit": "unit",
-    "uom": "unit",
-    "measure": "unit",
-    # unit_price
-    "rate": "unit_price",
-    "unit price": "unit_price",
-    "price": "unit_price",
-    "unit rate": "unit_price",
-    "mrp": "unit_price",
-    "cost": "unit_price",
-    # amount
-    "amount": "amount",
-    "total": "amount",
-    "line total": "amount",
-    "net amount": "amount",
-    "value": "amount",
-    "subtotal": "amount",
-    "sub total": "amount",
+PROMPT = """\
+You are an OCR information extraction engine.
+
+Extract structured information from this purchase order document image.
+
+The page layout is known:
+
+* Top left: company logo. Ignore the logo.
+* Top right: barcode with a reference number.
+* Main information table: two-column table where field labels are on the left and values are on the right.
+* Supplier and Purchaser section: two columns below the main table.
+
+  * Left column contains Supplier information.
+  * Right column contains Purchaser information.
+* Bottom section contains Requestor contact details.
+
+Important extraction rules:
+
+1. Extract only text that is visibly present in the document.
+2. Do not guess missing values.
+3. If a field is not found or unreadable, return null.
+4. Preserve the original spelling, capitalization, currency symbols, commas, decimals, dates, email addresses, and phone numbers.
+5. Do not mix Supplier and Purchaser details.
+6. For addresses, combine multiline address text into one string, preserving the order.
+7. Return valid JSON only.
+8. Do not include explanation, markdown, comments, or extra text.
+
+Extract the following fields:
+
+{
+"barcode_reference_number": null,
+"order_details": {
+"status": null,
+"purchase_order_number": null,
+"purchasing_organization": null,
+"purchasing_group": null,
+"division": null,
+"plant": null,
+"company_code": null,
+"business_unit": null,
+"bu_company_code": null
+},
+"financial_timeline": {
+"payment_terms": null,
+"order_submitted_date": null,
+"supplier_acknowledged_date": null,
+"net_total": null,
+"tax": null,
+"gross_total": null
+},
+"supplier": {
+"company_name": null,
+"supplier_id": null,
+"address": null,
+"email": null,
+"phone": null
+},
+"purchaser": {
+"company_name": null,
+"address": null
+},
+"requestor": {
+"name": null,
+"email": null,
+"phone": null
+}
 }
 
-# ---------------------------------------------------------------------------
-# Pass 1 prompt
-# ---------------------------------------------------------------------------
-PASS1_PROMPT = """\
-You are an expert OCR document processor. Analyze the invoice table on this page.
-Identify the exact text used in the table header row.
-Output ONLY a JSON array of the literal header strings found, from left to right.
-Do not rename them.
-["\
 """
-
-# ---------------------------------------------------------------------------
-# Pass 2 prompt template
-# ---------------------------------------------------------------------------
-PASS2_TEMPLATE = """\
-This is an invoice page. Extract the following fields and output ONLY raw JSON.
-
-Scalar fields:
-- vendor_name: the seller or company name
-- invoice_number: the invoice ID (labeled Invoice #, Invoice No, Inv No, etc.)
-- invoice_date: date the invoice was issued, format YYYY-MM-DD
-- due_date: payment due date, format YYYY-MM-DD (omit if not shown)
-- total_amount: the final payable total (labeled Total, Grand Total, Amount Due, etc.)
-
-Line items table — the columns in this invoice map to these keys:
-{column_mapping}
-
-Extract EVERY row from the table as an array called line_items.
-Omit a field if it is not visible. Do not invent values.
-
-{{\
-"""
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def page_to_base64(doc_path: str, page_num: int = 0) -> str:
+def page_to_base64(doc_path: str, page_num: int) -> str:
     doc = fitz.open(doc_path)
     page = doc[page_num]
-    mat = fitz.Matrix(2.0, 2.0)
-    pix = page.get_pixmap(matrix=mat)
+    pix = page.get_pixmap(matrix=fitz.Matrix(2.0, 2.0))
     img_bytes = pix.tobytes("png")
     doc.close()
     return base64.b64encode(img_bytes).decode()
 
 
-def _call_model(image_b64: str, prompt: str) -> str:
+def call_model(image_b64: str) -> str:
     payload = {
         "model": MODEL,
         "messages": [{
             "role": "user",
             "content": [
                 {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image_b64}"}},
-                {"type": "text", "text": prompt},
+                {"type": "text", "text": PROMPT},
             ],
         }],
-        "max_tokens": 512,
+        "max_tokens": 2048,
         "temperature": 0.0,
     }
-    r = requests.post(f"{VLLM_URL}/v1/chat/completions", headers=HEADERS_HTTP, json=payload, timeout=120)
+    r = requests.post(
+        f"{VLLM_URL}/v1/chat/completions",
+        json=payload,
+        timeout=180,
+    )
     if not r.ok:
-        print(f"  ERROR {r.status_code}: {r.text}")
-        r.raise_for_status()
+        raise RuntimeError(f"HTTP {r.status_code}: {r.text}")
     return r.json()["choices"][0]["message"]["content"].strip()
-
-
-def _clean_array(raw: str) -> list[str]:
-    """Best-effort extraction of a JSON array from model output."""
-    raw = re.sub(r"```(?:json)?", "", raw).strip()
-    if not raw.startswith("["):
-        raw = '["' + raw
-    start, end = raw.find("["), raw.rfind("]")
-    if start != -1 and end != -1:
-        raw = raw[start:end + 1]
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return []
-
-
-def _clean_object(raw: str) -> dict:
-    """Best-effort extraction of a JSON object from model output."""
-    raw = re.sub(r"```(?:json)?", "", raw).strip()
-    if not raw.startswith("{"):
-        raw = "{" + raw
-    start, end = raw.find("{"), raw.rfind("}")
-    if start != -1 and end != -1:
-        raw = raw[start:end + 1]
-    return json.loads(raw)
-
-
-def map_headers(headers: list[str]) -> dict[str, str]:
-    """Map discovered header strings to schema keys using synonym lookup."""
-    mapping = {}
-    for h in headers:
-        key = _HEADER_SYNONYMS.get(h.strip().lower())
-        if key:
-            mapping[h] = key
-    return mapping
-
-
-def build_column_mapping_text(header_to_key: dict[str, str]) -> str:
-    """Build the explicit mapping block injected into pass 2 prompt."""
-    if not header_to_key:
-        return '  (no table headers detected — extract line items by best guess)'
-    lines = []
-    for header, key in header_to_key.items():
-        lines.append(f'  column "{header}" → {key}')
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# Two-pass extraction
-# ---------------------------------------------------------------------------
-
-def pass1_discover_headers(image_b64: str) -> list[str]:
-    print("  [Pass 1] Discovering table headers...")
-    raw = _call_model(image_b64, PASS1_PROMPT)
-    print(f"  [Pass 1] Raw output: {raw!r}")
-    headers = _clean_array(raw)
-    print(f"  [Pass 1] Parsed headers: {headers}")
-    return headers
-
-
-def pass2_extract(image_b64: str, header_to_key: dict[str, str]) -> dict:
-    column_mapping = build_column_mapping_text(header_to_key)
-    prompt = PASS2_TEMPLATE.format(column_mapping=column_mapping)
-    print(f"  [Pass 2] Extracting with mapping:\n{column_mapping}")
-    raw = _call_model(image_b64, prompt)
-    print(f"  [Pass 2] Raw output:\n{raw}")
-    return _clean_object(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -209,37 +140,72 @@ def pass2_extract(image_b64: str, header_to_key: dict[str, str]) -> dict:
 # ---------------------------------------------------------------------------
 
 def main():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
     doc = fitz.open(DOC_PATH)
-    total_pages = len(doc)
+    total_pages = 1
     doc.close()
+
+    model_label = MODEL.split("/")[-1]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     print(f"Document : {DOC_PATH}")
     print(f"Model    : {MODEL}")
-    print(f"Pages    : {total_pages}\n")
+    print(f"Pages    : {total_pages}")
+    print(f"Output   : {OUTPUT_DIR}")
+    print()
+
+    results = {
+        "model": MODEL,
+        "doc_path": DOC_PATH,
+        "timestamp": timestamp,
+        "total_pages": total_pages,
+        "pages": [],
+    }
 
     for i in range(total_pages):
-        print(f"{'=' * 50}")
-        print(f"Page {i + 1} of {total_pages}")
-        print(f"{'=' * 50}")
+        print(f"{'=' * 60}")
+        print(f"Page {i + 1} / {total_pages}")
+        print(f"{'=' * 60}")
 
         img_b64 = page_to_base64(DOC_PATH, i)
 
-        # Pass 1 — layout discovery
-        headers = pass1_discover_headers(img_b64)
-        header_to_key = map_headers(headers)
-
-        unmapped = [h for h in headers if h not in header_to_key]
-        if unmapped:
-            print(f"  [Pass 1] Unmapped headers (add to _HEADER_SYNONYMS): {unmapped}")
-
-        # Pass 2 — data extraction
+        start = time.time()
         try:
-            result = pass2_extract(img_b64, header_to_key)
-            print("\n  [Result]")
-            print(json.dumps(result, indent=2))
-        except json.JSONDecodeError as e:
-            print(f"  [Pass 2] Invalid JSON: {e}")
+            raw_output = call_model(img_b64)
+            elapsed = round(time.time() - start, 2)
+            status = "ok"
+        except Exception as e:
+            raw_output = f"ERROR: {e}"
+            elapsed = round(time.time() - start, 2)
+            status = "error"
 
+        page_result = {
+            "page": i + 1,
+            "status": status,
+            "elapsed_seconds": elapsed,
+            "raw_output": raw_output,
+        }
+        results["pages"].append(page_result)
+
+        print(f"  Status  : {status}")
+        print(f"  Elapsed : {elapsed}s")
+        print(f"  Output  :\n{raw_output}")
         print()
+
+    # Save to file
+    out_file = os.path.join(OUTPUT_DIR, f"{model_label}_{timestamp}.json")
+    with open(out_file, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    # Final summary
+    print(f"{'=' * 60}")
+    print("SUMMARY")
+    print(f"{'=' * 60}")
+    for p in results["pages"]:
+        print(f"  Page {p['page']:>2} — {p['status']} — {p['elapsed_seconds']}s")
+    print()
+    print(f"Results saved to: {out_file}")
 
 
 if __name__ == "__main__":

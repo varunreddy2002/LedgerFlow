@@ -71,3 +71,4 @@ logs/
 .DS_Store
 .AppleDouble
 .LSOverride
+output/
