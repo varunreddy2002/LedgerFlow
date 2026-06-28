@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes.health import router as health_router
-from app.api.routes.businesses import router as businesses_router
-from app.api.routes.accounts import router as accounts_router
-from app.api.routes.documents import router as documents_router
-from app.api.routes.transactions import router as transactions_router
+from app.interface.api.routes.health import router as health_router
+from app.interface.api.routes.businesses import router as businesses_router
+from app.interface.api.routes.accounts import router as accounts_router
+from app.interface.api.routes.documents import router as documents_router
+from app.interface.api.routes.transactions import router as transactions_router
 
 # Schema is managed by Alembic migrations (run `alembic upgrade head`), not by
 # create_all(), so the app and the migration history never disagree.
