@@ -8,33 +8,40 @@ from app.domain.enums import CategoryType
 logger = logging.getLogger(__name__)
 
 
+# Chart of accounts tuned for a consulting / professional-services business.
 SYSTEM_CATEGORIES: list[tuple[str, CategoryType]] = [
-    ("Revenue",                 CategoryType.REVENUE),
-    ("Cost of Goods Sold",      CategoryType.EXPENSE),
-    ("Software & SaaS",         CategoryType.EXPENSE),
-    ("Payroll & Contractors",   CategoryType.EXPENSE),
-    ("Marketing & Advertising", CategoryType.EXPENSE),
-    ("Travel & Transport",      CategoryType.EXPENSE),
-    ("Meals & Entertainment",   CategoryType.EXPENSE),
-    ("Bank Fees",               CategoryType.EXPENSE),
-    ("Office & Operations",     CategoryType.EXPENSE),
-    ("Owner Draw",              CategoryType.OWNER_DRAW),
-    ("Transfer",                CategoryType.TRANSFER),
+    ("Consulting Revenue",                CategoryType.REVENUE),
+    ("Subcontractors & Freelancers",      CategoryType.EXPENSE),
+    ("Payroll & Benefits",                CategoryType.EXPENSE),
+    ("Software & SaaS",                   CategoryType.EXPENSE),
+    ("Professional Services",             CategoryType.EXPENSE),
+    ("Marketing & Business Development",   CategoryType.EXPENSE),
+    ("Travel & Client Meetings",          CategoryType.EXPENSE),
+    ("Meals & Entertainment",             CategoryType.EXPENSE),
+    ("Training & Development",             CategoryType.EXPENSE),
+    ("Office & Admin",                    CategoryType.EXPENSE),
+    ("Bank & Payment Fees",               CategoryType.EXPENSE),
+    ("Taxes & Government",                CategoryType.EXPENSE),
+    ("Owner Draw",                        CategoryType.OWNER_DRAW),
+    ("Transfer",                          CategoryType.TRANSFER),
 ]
 
 # (regex_pattern, category_name, confidence)
 GENERIC_RULES: list[tuple[str, str, float]] = [
-    (r"stripe|paypal|square|shopify payments|braintree|gumroad",                              "Revenue",                0.80),
-    (r"amazon web services|aws|google cloud|azure|digitalocean|heroku|vercel|cloudflare",     "Software & SaaS",        0.85),
-    (r"github|notion|figma|slack|zoom|dropbox|hubspot|intercom|jira|linear|loom|canva|adobe", "Software & SaaS",        0.85),
-    (r"gusto|rippling|adp|deel|remote\.com|justworks|bamboohr|paychex",                       "Payroll & Contractors",  0.85),
-    (r"google ads|facebook ads|meta ads|instagram ads|twitter ads|linkedin ads|tiktok ads",   "Marketing & Advertising",0.85),
-    (r"uber|lyft|airbnb|delta air|united airlines|southwest|american airlines|expedia",       "Travel & Transport",     0.75),
-    (r"doordash|grubhub|uber eats|starbucks|chipotle|restaurant|cafe|diner",                  "Meals & Entertainment",  0.70),
-    (r"bank fee|service fee|overdraft fee|wire fee|monthly fee|account fee",                  "Bank Fees",              0.85),
-    (r"amazon|staples|office depot|fedex|ups|usps|postage",                                   "Office & Operations",    0.65),
-    (r"transfer|zelle|wire transfer|ach transfer|venmo",                                      "Transfer",               0.70),
-    (r"owner draw|owner withdrawal|personal withdrawal",                                      "Owner Draw",             0.85),
+    (r"stripe|paypal|wise|bill\.com|client payment|invoice payment",                          "Consulting Revenue",               0.75),
+    (r"upwork|fiverr|toptal|contra|gun\.io|freelance",                                        "Subcontractors & Freelancers",     0.80),
+    (r"gusto|rippling|adp|justworks|paychex|deel",                                            "Payroll & Benefits",               0.85),
+    (r"aws|amazon web services|google cloud|azure|github|notion|figma|slack|zoom|openai|anthropic|vercel|linear", "Software & SaaS",        0.85),
+    (r"legal|attorney|law firm|accounting|quickbooks|cpa|insurance|clio",                     "Professional Services",            0.80),
+    (r"google ads|linkedin ads|meta ads|hubspot|mailchimp|apollo",                            "Marketing & Business Development",  0.80),
+    (r"delta|united|american airlines|southwest|airbnb|marriott|hilton|uber|lyft|expedia",    "Travel & Client Meetings",         0.75),
+    (r"starbucks|restaurant|cafe|doordash|grubhub|uber eats|chipotle",                        "Meals & Entertainment",            0.70),
+    (r"udemy|coursera|pluralsight|oreilly|conference|summit",                                 "Training & Development",           0.75),
+    (r"amazon|staples|fedex|ups|usps|wework|regus",                                           "Office & Admin",                   0.65),
+    (r"bank fee|wire fee|service fee|stripe fee|processing fee",                              "Bank & Payment Fees",              0.85),
+    (r"irs|franchise tax|estimated tax|dept of revenue|edd",                                  "Taxes & Government",               0.85),
+    (r"owner draw|owner withdrawal|distribution|partner draw",                                "Owner Draw",                       0.85),
+    (r"transfer|zelle|venmo|wire transfer|ach transfer",                                      "Transfer",                         0.70),
 ]
 
 

@@ -64,6 +64,16 @@ class ExtractedDocument(BaseModel):
     tax_amount: float | None = Field(None, description="the total tax amount of the document")
     line_items: list[DocumentLineItem] = Field(default_factory=list, description="all line items in the document")
 
+
+class CategoryAssignment(BaseModel):
+    transaction_id: int = Field(description="the id of the transaction")
+    category_name: str | None = Field(None, description="the chosen category name exactly as given, or null if none fits")
+
+
+class CategoryAssignments(BaseModel):
+    assignments: list[CategoryAssignment]
+
+
 class ParseErrorDetail(BaseModel):
     row_number: int
     reason: str
