@@ -36,12 +36,12 @@ class TransactionType(StrEnum):
 
 
 class ReviewStatus(StrEnum):
+    UNCATEGORIZED = "uncategorized"
     NEEDS_REVIEW = "needs_review"
     AUTO_APPROVED = "auto_approved"
     USER_APPROVED = "user_approved"
     USER_CORRECTED = "user_corrected"
     IGNORED = "ignored"
-
 
 class ChatRole(StrEnum):
     USER = "user"

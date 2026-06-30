@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     # Chat — which provider to use ("bedrock" or "openai")
     chat_provider: str = "bedrock"
     default_chat_model: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    default_sonnet_model: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
     # Embedding — which provider to use ("bedrock")
     embedding_provider: str = "bedrock"
@@ -36,7 +37,7 @@ class Settings(BaseSettings):
 
     # AWS — used by Bedrock (chat + embedding)
     aws_region: str = "us-east-1"
-    aws_api_key: str = os.environ.get("AWS_API_KEY", "")
+    aws_api_key: str = os.environ.get("AWS_API_KEY")
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
