@@ -12,13 +12,9 @@ from app.infrastructure.db.database import get_db
 from app.domain.models import Business, Document
 
 
-from app.infrastructure.storage.document_storage import DocumentService
-
 router = APIRouter(tags=["documents"])
 
 ALLOWED_EXTENSIONS: set[str] = {".csv", ".pdf"}
-
-_doc_service = DocumentService()
 
 """
 @router.get("/businesses/{business_id}/documents", response_model=list[DocumentOut])

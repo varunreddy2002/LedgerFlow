@@ -3,6 +3,7 @@ import { useBusiness } from '../../context/BusinessContext'
 
 const links = [
   { to: '/dashboard',    label: 'Dashboard',    icon: '▦' },
+  { to: '/chat',         label: 'Assistant',    icon: '✦' },
   { to: '/documents',    label: 'Documents',    icon: '↑' },
   { to: '/transactions', label: 'Transactions', icon: '≡' },
   { to: '/review',       label: 'Review queue', icon: '!' },

@@ -7,7 +7,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.domain.enums import ReviewStatus, TransactionType
-from app.domain.models import Transaction
+from app.domain.models import Transaction, Document
 
 
 class TransactionService:
@@ -25,7 +25,7 @@ class TransactionService:
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
     ) -> dict:
-        """Return aggregate totals for non-excluded transactions.
+        """Return aggregate totals for a business's transactions.
 
         Response shape:
         {
@@ -37,23 +37,26 @@ class TransactionService:
           "by_review_status": { "needs_review": 10, "auto_approved": 32 }
         }
         """
-        q = db.query(Transaction).filter(
-            Transaction.business_id == business_id,
-            Transaction.is_excluded_from_pnl == False,  # noqa: E712
+        # Transactions have no business_id — scope them through their document.
+        q = (
+            db.query(Transaction)
+            .join(Document, Transaction.document_id == Document.id)
+            .filter(Document.business_id == business_id)
         )
         if start_date is not None:
-            q = q.filter(Transaction.transaction_date >= start_date)
+            q = q.filter(Transaction.date >= start_date)
         if end_date is not None:
-            q = q.filter(Transaction.transaction_date <= end_date)
+            q = q.filter(Transaction.date <= end_date)
 
         transactions = q.all()
 
+        # Direction now lives in trans_type: CREDIT = money in, DEBIT = money out.
         total_inflow: Decimal = sum(
-            (t.amount for t in transactions if t.direction == Direction.INFLOW),
+            (t.amount for t in transactions if t.trans_type == TransactionType.CREDIT),
             Decimal("0"),
         )
         total_outflow: Decimal = sum(
-            (t.amount for t in transactions if t.direction == Direction.OUTFLOW),
+            (t.amount for t in transactions if t.trans_type == TransactionType.DEBIT),
             Decimal("0"),
         )
 

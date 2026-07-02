@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.interface.api.routes.businesses import get_business_or_404
 from app.infrastructure.db.database import get_db
-from app.domain.models import Business, Transaction
+from app.domain.models import Business, Transaction, Document
 from app.domain.enums import ReviewStatus, TransactionType
 from app.domain.schemas import TransactionOut, TransactionUpdate
 from app.application.services.transaction_service import TransactionService
@@ -59,25 +59,26 @@ def list_transactions(
     db: Session = Depends(get_db),
     _: Business = Depends(get_business_or_404),
 ):
-    q = db.query(Transaction).filter(Transaction.business_id == business_id)
+    # Transactions have no business_id — scope them through their document.
+    q = (
+        db.query(Transaction)
+        .join(Document, Transaction.document_id == Document.id)
+        .filter(Document.business_id == business_id)
+    )
 
     if review_status is not None:
         q = q.filter(Transaction.review_status == review_status)
     if category_id is not None:
         q = q.filter(Transaction.category_id == category_id)
-    if False:  # direction filter removed � use trans_type
-        q = q.filter(Transaction.direction == direction)
     if transaction_type is not None:
-        q = q.filter(Transaction.transaction_type == transaction_type)
-    if False:  # is_excluded_from_pnl removed
-        q = q.filter(Transaction.is_excluded_from_pnl == is_excluded_from_pnl)
+        q = q.filter(Transaction.trans_type == transaction_type)
     if start_date is not None:
-        q = q.filter(Transaction.transaction_date >= start_date)
+        q = q.filter(Transaction.date >= start_date)
     if end_date is not None:
-        q = q.filter(Transaction.transaction_date <= end_date)
+        q = q.filter(Transaction.date <= end_date)
 
     return (
-        q.order_by(Transaction.transaction_date.desc())
+        q.order_by(Transaction.date.desc())
         .offset(offset)
         .limit(limit)
         .all()

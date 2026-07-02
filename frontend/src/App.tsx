@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard'
 import Documents from './pages/Documents'
 import Transactions from './pages/Transactions'
 import ReviewQueue from './pages/ReviewQueue'
+import Chat from './pages/Chat'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/documents" element={<Documents />} />
             <Route path="/transactions" element={<Transactions />} />
             <Route path="/review" element={<ReviewQueue />} />
+            <Route path="/chat" element={<Chat />} />
           </Route>
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

@@ -53,7 +53,7 @@ class DocumentLineItem(BaseModel):
     net_price: float | None = Field(None, description="price per single unit before tax")
     tax_amount: float | None = Field(None, description="tax charged on this line item, if any")
 
-
+# Invoice or bill extraction by agent
 class ExtractedDocument(BaseModel):
     seller_name: str | None = Field(None, description="the party who issued the document (the seller / vendor)")
     buyer_name: str | None = Field(None, description="the party being billed (the buyer / bill-to / customer)")

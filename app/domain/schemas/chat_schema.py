@@ -40,3 +40,25 @@ class ChatMessageCreate(ChatMessageBase):
 class ChatMessageOut(ORMModel, ChatMessageBase):
     id: int
     created_at: datetime
+
+
+# --- Chat endpoint I/O ----------------------------------------------------
+class ChatRequest(BaseModel):
+    """Incoming chat message. session_id is null to start a new conversation."""
+    message: str
+    session_id: Optional[int] = None
+
+
+class ChatResponse(BaseModel):
+    """The agent's answer plus the session it belongs to."""
+    session_id: int
+    answer: str
+
+
+class ChatTurn(ORMModel):
+    """One persisted message, for loading conversation history in the UI."""
+    id: int
+    role: ChatRole
+    message: str
+    agent_name: Optional[str] = None
+    created_at: datetime

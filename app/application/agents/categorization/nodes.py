@@ -6,12 +6,12 @@ from app.application.agents.categorization.state import CategorizationState
 import re
 from app.core.config import settings
 import json
-from app.infrastructure.llm import bedrock_service
+from app.infrastructure.llm import BedrockService
 from app.domain.schemas import CategoryAssignments
 
 
 logger = get_logger(__name__)
-
+bedrock_service = BedrockService(settings.default_chat_model)
 def load_data(state: CategorizationState) -> dict:
     business_id = state["business_id"]
 
@@ -26,10 +26,21 @@ def load_data(state: CategorizationState) -> dict:
                        )
                        .all()
         ]
-        # categories + rules same as before
-        ...
-    return {"pending": pending, "categories": categories, "rules": rules}
+        categories = [
+            {"id": c.id, "name": c.name, "type": c.category_type.value}
+            for c in db.query(Category).filter(Category.business_id == business_id).all()
+        ]
 
+        rules = [
+            {"pattern": r.pattern, "category_id": r.category_id, "confidence": r.confidence or 0.0}
+            for r in db.query(CategorizationRule)
+                       .filter(CategorizationRule.business_id == business_id)
+                       .order_by(CategorizationRule.priority)
+                       .all()
+        ]
+
+    logger.info("load_data: %d pending, %d categories, %d rules", len(pending), len(categories), len(rules))
+    return {"pending": pending, "categories": categories, "rules": rules}
 
 def apply_rules(state: CategorizationState) -> dict:
     pending = state["pending"]
@@ -105,3 +116,24 @@ def llm_categorize(state: CategorizationState) -> dict:
 
     logger.info("llm_categorize: handled %d unmatched transactions", len(unmatched))
     return {"assignments": assignments}
+
+
+def persist(state: CategorizationState) -> dict:
+    assignments = state["assignments"]
+    if not assignments:
+        logger.info("persist: nothing to write")
+        return {}
+
+    with session_scope() as db:
+        txns = (
+            db.query(Transaction)
+            .filter(Transaction.id.in_(assignments.keys()))
+            .all()
+        )
+        for txn in txns:
+            a = assignments[txn.id]
+            txn.category_id = a["category_id"]
+            txn.review_status = a["review_status"]
+
+    logger.info("persist: updated %d transactions", len(assignments))
+    return {}

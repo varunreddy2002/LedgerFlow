@@ -2,6 +2,17 @@ from pydantic_settings import BaseSettings
 import os
 import dotenv
 
+# Load .env into os.environ so boto3 (Bedrock) can find AWS credentials
+# such as AWS_BEARER_TOKEN_BEDROCK. pydantic reads .env for its own fields,
+# but boto3 reads from the process environment — this bridges the two.
+dotenv.load_dotenv()
+
+# boto3 (Bedrock) looks for AWS_BEARER_TOKEN_BEDROCK. We store the key as
+# AWS_API_KEY, so mirror it into the name boto3 expects if not already set.
+if os.environ.get("AWS_API_KEY") and not os.environ.get("AWS_BEARER_TOKEN_BEDROCK"):
+    os.environ["AWS_BEARER_TOKEN_BEDROCK"] = os.environ["AWS_API_KEY"]
+
+
 class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:postgres@localhost:5432/ledgerflow"
     upload_dir: str = "./uploads"
@@ -39,7 +50,7 @@ class Settings(BaseSettings):
     aws_region: str = "us-east-1"
     aws_api_key: str = os.environ.get("AWS_API_KEY")
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 settings = Settings()
