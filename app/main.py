@@ -25,3 +25,12 @@ app.include_router(accounts_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
 app.include_router(transactions_router, prefix="/api")
 app.include_router(chat_router, prefix="/api")
+
+
+def main() -> None:
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+
+
+if __name__ == "__main__":
+    main()

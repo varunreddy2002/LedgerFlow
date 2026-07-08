@@ -33,6 +33,8 @@ class CategoryType(StrEnum):
 class TransactionType(StrEnum):
     DEBIT = "debit"
     CREDIT = "credit"
+    PAYABLE = "payable"      # bill — we owe them
+    RECEIVABLE = "receivable"  # invoice — they owe us
 
 
 class ReviewStatus(StrEnum):

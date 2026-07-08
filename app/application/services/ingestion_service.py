@@ -1,5 +1,6 @@
 from pathlib import Path
 import hashlib
+import re
 import pandas as pd
 from datetime import date, datetime
 from decimal import Decimal
@@ -12,6 +13,7 @@ from app.domain.enums import TransactionType, ReviewStatus
 from app.domain.models import Document, Transaction, Business, TransactionLineItem, DocumentExtraction, Customer, Vendor
 from app.core.logging import get_logger
 from app.domain.schemas import CSVColumnMapping
+from app.application.agents.categorization import run_categorization
 
 logger = get_logger(__name__)
 
@@ -40,11 +42,14 @@ def run_ingestion(business_id: int, filename: str, content: bytes, ext: str):
         logger.info("Document row created: document_id=%s status=%s", doc.id, doc.status)
 
         if ext == ".csv":
-            _process_csv(db, business_id, doc, file_path)
+            _process_csv(db, business_id, doc, file_path)       
         elif ext == ".pdf":
             _process_pdf(db, business_id, doc, file_path, filename)
-
+        final_status = doc.status
         logger.info("Ingestion finished: document_id=%s final_status=%s", doc.id, doc.status)
+
+    if final_status == DocumentStatus.PROCESSED:
+        run_categorization(business_id)
 
 
 def _checksum(content: bytes) -> str:
@@ -204,26 +209,33 @@ def _to_decimal(value) -> Decimal | None:
 
 
 def _classify(business_name: str, extraction) -> tuple[SourceType, TransactionType] | None:
-    name = business_name.strip().lower()
-    seller = (extraction.seller_name or "").strip().lower()
-    buyer = (extraction.buyer_name or "").strip().lower()
+    name = _normalize(business_name)
+    seller = _normalize(extraction.seller_name or "")
+    buyer = _normalize(extraction.buyer_name or "")
 
     if name == seller:
-        return SourceType.INVOICE, TransactionType.CREDIT      # we sold → money in
+        return SourceType.INVOICE, TransactionType.RECEIVABLE    # we sold → money in
     if name == buyer:
-        return SourceType.VENDOR_BILL, TransactionType.DEBIT   # we bought → money out
-    return None                                                # can't tell
+        return SourceType.VENDOR_BILL, TransactionType.PAYABLE   # we bought → money out
+    return None                                                  # can't tell
+
+
+def _normalize(name: str) -> str:
+    return re.sub(r"\s+", " ", name.strip().lower())
 
 
 def _upsert_party(db, business_id: int, name: str, model):
-    """Find a vendor/customer by name for this business, or create it. Returns its id."""
-    party = (
-        db.query(model)
-        .filter(model.business_id == business_id, model.name == name)
-        .first()
-    )
-    if party is None:
-        party = model(business_id=business_id, name=name)
-        db.add(party)
-        db.flush()          # get party.id
+    """Find vendor/customer by exact normalized name, or create it. Returns its id."""
+    normalized = _normalize(name)
+    existing = db.query(model).filter(model.business_id == business_id).all()
+
+    for record in existing:
+        if _normalize(record.name) == normalized:
+            logger.info("Party matched: model=%s id=%s name=%r", model.__name__, record.id, record.name)
+            return record.id
+
+    party = model(business_id=business_id, name=name)
+    db.add(party)
+    db.flush()
+    logger.info("Party created: model=%s id=%s name=%r", model.__name__, party.id, name)
     return party.id

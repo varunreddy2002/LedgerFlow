@@ -7,6 +7,9 @@ class CategorizationState(TypedDict):
 
     pending: list[dict]
     categories: list[dict]
+    vendors: list[dict]
+    customers: list[dict]
     rules: list[dict]
     unmatched: list[dict]
     assignments: dict[int, dict]
+    party_assignments: dict[int, dict]

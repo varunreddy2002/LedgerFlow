@@ -2,16 +2,9 @@ import { useState } from 'react'
 import { useBusiness } from '../context/BusinessContext'
 import { useAsync } from '../hooks/useAsync'
 import { transactionsApi } from '../api/transactions'
-import { DirectionBadge, TxTypeBadge } from '../components/ui/Badge'
+import { AmountBadge, TxTypeBadge } from '../components/ui/Badge'
 import { PageSpinner } from '../components/ui/Spinner'
 import type { Transaction, ReviewStatus } from '../types'
-
-function confidence(score: number | null) {
-  if (score === null) return '—'
-  const pct = Math.round(score * 100)
-  const color = pct >= 75 ? 'text-green-700' : pct >= 50 ? 'text-amber-700' : 'text-red-700'
-  return <span className={color}>{pct}%</span>
-}
 
 export default function ReviewQueue() {
   const { selected } = useBusiness()
@@ -74,12 +67,12 @@ export default function ReviewQueue() {
                     onClick={() => setActive(txn)}
                     className={`cursor-pointer border-b border-gray-50 last:border-0 hover:bg-gray-50 ${active?.id === txn.id ? 'bg-blue-50' : ''}`}
                   >
-                    <td className="px-4 py-3 text-gray-500 tabular-nums">{txn.transaction_date}</td>
+                    <td className="px-4 py-3 text-gray-500 tabular-nums">{txn.date}</td>
                     <td className="px-4 py-3 max-w-[180px] truncate text-gray-800">
-                      {txn.description_clean ?? txn.description_raw ?? '—'}
+                      {txn.description ?? '—'}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      <DirectionBadge direction={txn.direction} amount={txn.amount} />
+                      <AmountBadge transType={txn.trans_type} amount={txn.amount} />
                     </td>
                   </tr>
                 ))}
@@ -99,13 +92,13 @@ export default function ReviewQueue() {
 
               <dl className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white text-sm">
                 {[
-                  ['Description', active.description_clean ?? active.description_raw ?? '—'],
-                  ['Date', active.transaction_date],
-                  ['Amount', <DirectionBadge direction={active.direction} amount={active.amount} />],
-                  ['Merchant', active.merchant_name ?? '—'],
-                  ['Type', <TxTypeBadge type={active.transaction_type} />],
-                  ['Confidence', confidence(active.confidence_score)],
-                  ['Notes', active.notes ?? '—'],
+                  ['Description', active.description ?? '—'],
+                  ['Date', active.date],
+                  ['Amount', <AmountBadge transType={active.trans_type} amount={active.amount} />],
+                  ['Vendor', active.vendor_name ?? '—'],
+                  ['Customer', active.customer_name ?? '—'],
+                  ['Category', active.category_name ?? '—'],
+                  ['Type', <TxTypeBadge type={active.trans_type} />],
                 ].map(([label, val]) => (
                   <div key={String(label)} className="flex justify-between gap-4 px-4 py-2.5">
                     <dt className="text-gray-400">{label}</dt>

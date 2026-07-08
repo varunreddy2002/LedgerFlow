@@ -70,8 +70,8 @@ export default function Dashboard() {
                 <tbody>
                   {recentDocs.map(doc => (
                     <tr key={doc.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                      <td className="px-4 py-2.5 font-medium text-gray-800">{doc.original_filename}</td>
-                      <td className="px-4 py-2.5 text-gray-500 capitalize">{doc.source_type.replace('_', ' ')}</td>
+                      <td className="px-4 py-2.5 font-medium text-gray-800">{doc.filename}</td>
+                      <td className="px-4 py-2.5 text-gray-500 capitalize">{doc.source.replace(/_/g, ' ')}</td>
                       <td className="px-4 py-2.5 text-gray-500">
                         {new Date(doc.uploaded_at).toLocaleDateString()}
                       </td>

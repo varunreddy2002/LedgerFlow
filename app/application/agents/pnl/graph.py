@@ -33,8 +33,7 @@ def build_pnl_graph():
 pnl_graph = build_pnl_graph()
 
 
-def run_pnl(business_id: int, start_date: str, end_date: str) -> dict:
-    """Entry point — compute cash-basis P&L for a business over a period."""
+def run_pnl(business_id, start_date, end_date, config=None):
     logger.info("P&L started: business_id=%s period=%s..%s", business_id, start_date, end_date)
 
     initial_state: PnLState = {
@@ -47,5 +46,5 @@ def run_pnl(business_id: int, start_date: str, end_date: str) -> dict:
         "uncategorized_count": 0,
     }
 
-    result = pnl_graph.invoke(initial_state)
+    result = pnl_graph.invoke(initial_state, config=config)
     return result["report"]

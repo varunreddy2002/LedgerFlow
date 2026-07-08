@@ -50,9 +50,23 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """The agent's answer plus the session it belongs to."""
+    """The agent's answer plus the session it belongs to.
+
+    When status == "pending_chart", the graph paused for user confirmation:
+    `answer` is None, `interrupt` carries the payload from the paused node,
+    and the frontend must call POST /chat/resume with confirmed=true/false.
+    """
     session_id: int
-    answer: str
+    status: str = "done"                     # "done" | "pending_chart"
+    answer: Optional[str] = None
+    chart_image: Optional[str] = None        # base64 PNG when a chart was generated this turn
+    interrupt: Optional[Any] = None          # only set when status == "pending_chart"
+
+
+class ResumeRequest(BaseModel):
+    """Frontend's answer to a pending chart_confirm interrupt."""
+    session_id: int
+    confirmed: bool
 
 
 class ChatTurn(ORMModel):

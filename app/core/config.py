@@ -39,7 +39,8 @@ class Settings(BaseSettings):
 
     # Chat — which provider to use ("bedrock" or "openai")
     chat_provider: str = "bedrock"
-    default_chat_model: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    #default_chat_model: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+    default_chat_model: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
     default_sonnet_model: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
 
     # Embedding — which provider to use ("bedrock")

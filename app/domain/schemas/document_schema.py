@@ -9,16 +9,11 @@ from app.domain.schemas.base import ORMModel
 class DocumentOut(ORMModel):
     id: int
     business_id: int
-    party_id: Optional[int] = None
     source: SourceType
     filename: str
-    file_path: str
-    sha256_checksum: str
     status: DocumentStatus
     uploaded_at: datetime
     processed_at: Optional[datetime] = None
-    created_at: datetime
-    updated_at: datetime
 
 
 class DocumentExtractionOut(ORMModel):

@@ -16,7 +16,6 @@ router = APIRouter(tags=["documents"])
 
 ALLOWED_EXTENSIONS: set[str] = {".csv", ".pdf"}
 
-"""
 @router.get("/businesses/{business_id}/documents", response_model=list[DocumentOut])
 def list_documents(
     business_id: int,
@@ -37,7 +36,6 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
     if not doc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return doc
-"""
 
 @router.post(
     "/businesses/{business_id}/documents/upload",

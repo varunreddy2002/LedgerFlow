@@ -15,9 +15,17 @@ export interface ChatSession {
   created_at: string
 }
 
+export interface ChatInterrupt {
+  type: string
+  description: string
+}
+
 export interface ChatResponse {
   session_id: number
-  answer: string
+  status: 'done' | 'pending_chart'
+  answer?: string | null
+  chart_image?: string | null
+  interrupt?: ChatInterrupt | null
 }
 
 export const chatApi = {
@@ -25,6 +33,12 @@ export const chatApi = {
     api.post<ChatResponse>(`/businesses/${businessId}/chat`, {
       message,
       session_id: sessionId,
+    }),
+
+  resume: (businessId: number, sessionId: number, confirmed: boolean) =>
+    api.post<ChatResponse>(`/businesses/${businessId}/chat/resume`, {
+      session_id: sessionId,
+      confirmed,
     }),
 
   listSessions: (businessId: number) =>

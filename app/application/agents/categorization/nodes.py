@@ -1,6 +1,6 @@
 from app.infrastructure.db.database import session_scope
-from app.domain.models import Transaction, Document, Category, CategorizationRule
-from app.domain.enums import ReviewStatus
+from app.domain.models import Transaction, Document, Category, CategorizationRule, Vendor, Customer
+from app.domain.enums import ReviewStatus, TransactionType
 from app.core.logging import get_logger
 from app.application.agents.categorization.state import CategorizationState
 import re
@@ -12,12 +12,20 @@ from app.domain.schemas import CategoryAssignments
 
 logger = get_logger(__name__)
 bedrock_service = BedrockService(settings.default_chat_model)
+
+
 def load_data(state: CategorizationState) -> dict:
     business_id = state["business_id"]
 
     with session_scope() as db:
         pending = [
-            {"id": t.id, "description": t.description or ""}
+            {
+                "id": t.id,
+                "description": t.description or "",
+                "trans_type": t.trans_type.value,
+                "vendor_id": t.vendor_id,
+                "customer_id": t.customer_id,
+            }
             for t in db.query(Transaction)
                        .join(Document, Transaction.document_id == Document.id)
                        .filter(
@@ -30,6 +38,14 @@ def load_data(state: CategorizationState) -> dict:
             {"id": c.id, "name": c.name, "type": c.category_type.value}
             for c in db.query(Category).filter(Category.business_id == business_id).all()
         ]
+        vendors = [
+            {"id": v.id, "name": v.name}
+            for v in db.query(Vendor).filter(Vendor.business_id == business_id).all()
+        ]
+        customers = [
+            {"id": c.id, "name": c.name}
+            for c in db.query(Customer).filter(Customer.business_id == business_id).all()
+        ]
 
         rules = [
             {"pattern": r.pattern, "category_id": r.category_id, "confidence": r.confidence or 0.0}
@@ -39,8 +55,56 @@ def load_data(state: CategorizationState) -> dict:
                        .all()
         ]
 
-    logger.info("load_data: %d pending, %d categories, %d rules", len(pending), len(categories), len(rules))
-    return {"pending": pending, "categories": categories, "rules": rules}
+    logger.info(
+        "load_data: %d pending, %d categories, %d vendors, %d customers, %d rules",
+        len(pending), len(categories), len(vendors), len(customers), len(rules),
+    )
+    return {
+        "pending": pending,
+        "categories": categories,
+        "vendors": vendors,
+        "customers": customers,
+        "rules": rules,
+    }
+
+
+def match_party(state: CategorizationState) -> dict:
+    """Substring-match transaction descriptions against known vendors/customers.
+
+    Money-out rows (debit/payable) → try vendors.
+    Money-in rows  (credit/receivable) → try customers.
+    Skips transactions that already have a party set (e.g. from PDF extraction).
+    """
+    pending = state["pending"]
+    vendors = state["vendors"]
+    customers = state["customers"]
+
+    OUTFLOW = {TransactionType.DEBIT.value, TransactionType.PAYABLE.value}
+    INFLOW = {TransactionType.CREDIT.value, TransactionType.RECEIVABLE.value}
+
+    party_assignments: dict[int, dict] = {}
+
+    for txn in pending:
+        if txn.get("vendor_id") or txn.get("customer_id"):
+            continue  # already has a party (from PDF ingestion)
+
+        desc = (txn["description"] or "").lower()
+        if not desc:
+            continue
+
+        if txn["trans_type"] in OUTFLOW:
+            for v in vendors:
+                if v["name"].lower() in desc:
+                    party_assignments[txn["id"]] = {"vendor_id": v["id"]}
+                    break
+        elif txn["trans_type"] in INFLOW:
+            for c in customers:
+                if c["name"].lower() in desc:
+                    party_assignments[txn["id"]] = {"customer_id": c["id"]}
+                    break
+
+    logger.info("match_party: matched %d of %d pending", len(party_assignments), len(pending))
+    return {"party_assignments": party_assignments}
 
 def apply_rules(state: CategorizationState) -> dict:
     pending = state["pending"]
@@ -120,20 +184,33 @@ def llm_categorize(state: CategorizationState) -> dict:
 
 def persist(state: CategorizationState) -> dict:
     assignments = state["assignments"]
-    if not assignments:
+    party_assignments = state.get("party_assignments") or {}
+
+    touched_ids = set(assignments.keys()) | set(party_assignments.keys())
+    if not touched_ids:
         logger.info("persist: nothing to write")
         return {}
 
     with session_scope() as db:
         txns = (
             db.query(Transaction)
-            .filter(Transaction.id.in_(assignments.keys()))
+            .filter(Transaction.id.in_(touched_ids))
             .all()
         )
         for txn in txns:
-            a = assignments[txn.id]
-            txn.category_id = a["category_id"]
-            txn.review_status = a["review_status"]
+            if txn.id in assignments:
+                a = assignments[txn.id]
+                txn.category_id = a["category_id"]
+                txn.review_status = a["review_status"]
+            if txn.id in party_assignments:
+                p = party_assignments[txn.id]
+                if "vendor_id" in p:
+                    txn.vendor_id = p["vendor_id"]
+                if "customer_id" in p:
+                    txn.customer_id = p["customer_id"]
 
-    logger.info("persist: updated %d transactions", len(assignments))
+    logger.info(
+        "persist: %d category updates, %d party updates",
+        len(assignments), len(party_assignments),
+    )
     return {}

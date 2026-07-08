@@ -6,13 +6,6 @@ import { DocStatusBadge } from '../components/ui/Badge'
 import { PageSpinner } from '../components/ui/Spinner'
 import type { UploadResponse } from '../types'
 
-function FileSize({ bytes }: { bytes: number | null }) {
-  if (!bytes) return <span className="text-gray-400">—</span>
-  if (bytes < 1024) return <span>{bytes} B</span>
-  if (bytes < 1024 * 1024) return <span>{(bytes / 1024).toFixed(0)} KB</span>
-  return <span>{(bytes / (1024 * 1024)).toFixed(1)} MB</span>
-}
-
 export default function Documents() {
   const { selected } = useBusiness()
   const id = selected!.id
@@ -89,15 +82,8 @@ export default function Documents() {
         )}
 
         {result && (
-          <div className={`rounded-lg px-4 py-3 text-sm ring-1 ${result.is_duplicate_file ? 'bg-amber-50 text-amber-800 ring-amber-200' : 'bg-green-50 text-green-800 ring-green-200'}`}>
-            {result.message}
-            {result.parse_errors.length > 0 && (
-              <ul className="mt-1 list-inside list-disc text-xs">
-                {result.parse_errors.map((e, i) => (
-                  <li key={i}>Row {e.row_number}: {e.reason}</li>
-                ))}
-              </ul>
-            )}
+          <div className="rounded-lg bg-green-50 px-4 py-3 text-sm text-green-800 ring-1 ring-green-200">
+            File uploaded — processing in background.
           </div>
         )}
 
@@ -113,7 +99,6 @@ export default function Documents() {
                     <tr className="border-b border-gray-100 bg-gray-50">
                       <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Filename</th>
                       <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Type</th>
-                      <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Size</th>
                       <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Uploaded</th>
                       <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Status</th>
                     </tr>
@@ -121,9 +106,8 @@ export default function Documents() {
                   <tbody>
                     {docs.map(doc => (
                       <tr key={doc.id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50">
-                        <td className="px-4 py-2.5 font-medium text-gray-800">{doc.original_filename}</td>
-                        <td className="px-4 py-2.5 text-gray-500 capitalize">{doc.source_type.replace('_', ' ')}</td>
-                        <td className="px-4 py-2.5 text-gray-500"><FileSize bytes={doc.file_size} /></td>
+                        <td className="px-4 py-2.5 font-medium text-gray-800">{doc.filename}</td>
+                        <td className="px-4 py-2.5 text-gray-500 capitalize">{doc.source.replace(/_/g, ' ')}</td>
                         <td className="px-4 py-2.5 text-gray-500">{new Date(doc.uploaded_at).toLocaleDateString()}</td>
                         <td className="px-4 py-2.5"><DocStatusBadge status={doc.status} /></td>
                       </tr>
