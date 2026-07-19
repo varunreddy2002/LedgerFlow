@@ -25,6 +25,9 @@ def run_chat(message: str, business_id: int, thread_id: str) -> dict:
                 {"role": "user", "content": f"business_id={business_id}\n\nQuestion: {message}"}
             ],
             "business_id": business_id,
+            "pending_resolution": None,
+            "review_preview": None,
+            "review_result": None,
             "chart_description": None,
             "chart_data": None,
             "chart_code": None,
@@ -55,8 +58,8 @@ def _extract_result(config: dict) -> dict:
 
     if state.tasks and state.tasks[0].interrupts:
         interrupt_val = state.tasks[0].interrupts[0].value
-        logger.info("[chat._extract_result] status=pending_chart payload=%s", interrupt_val)
-        return {"status": "pending_chart", "interrupt": interrupt_val}
+        logger.info("[chat._extract_result] status=interrupt payload=%s", interrupt_val)
+        return {"status": "interrupt", "interrupt": interrupt_val}
 
     answer = state.values["messages"][-1].content
     chart_image = state.values.get("chart_image")

@@ -11,7 +11,9 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.application.agents.chat.state import ChatState
 from app.application.agents.chat.nodes import (
-    agent, run_tools, chart_code_gen, chart_confirm, chart_sandbox,
+    agent, run_tools,
+    review_preview, review_confirm, review_apply,
+    chart_code_gen, chart_confirm, chart_sandbox,
 )
 
 logger = get_logger(__name__)
@@ -27,6 +29,9 @@ def build_chat_graph():
     g = StateGraph(ChatState)
     g.add_node("agent", agent)
     g.add_node("run_tools", run_tools)
+    g.add_node("review_preview", review_preview)
+    g.add_node("review_confirm", review_confirm)
+    g.add_node("review_apply", review_apply)
     g.add_node("chart_code_gen", chart_code_gen)
     g.add_node("chart_confirm", chart_confirm)
     g.add_node("chart_sandbox", chart_sandbox)

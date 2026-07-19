@@ -28,9 +28,11 @@ def chat(business_id: int, payload: ChatRequest, db: Session = Depends(get_db)):
         db, business_id, payload.message, payload.session_id,
     )
     if interrupt_val is not None:
+        # interrupt payload carries a "type": "review_confirm" | "chart_confirm"
+        status = interrupt_val.get("type", "interrupt") if isinstance(interrupt_val, dict) else "interrupt"
         return ChatResponse(
             session_id=session_id,
-            status="pending_chart",
+            status=status,
             interrupt=interrupt_val,
         )
     return ChatResponse(session_id=session_id, status="done", answer=answer)

@@ -1,11 +1,14 @@
-"""Document upload and retrieval endpoints."""
+"""Document retrieval endpoints.
 
-from pathlib import Path
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile, status
+NOTE: file-upload ingestion (CSV/PDF → bank_transactions/bills/invoices) is
+intentionally dormant during the ledger-core rebuild — the escalation ladder is
+fed from *seeded* ``bank_transactions`` instead (see docs/HANDOVER.md). The upload
+endpoint therefore returns 501 until ingestion is repointed at the new schema.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.orm import Session
-from app.domain.schemas import DocumentOut, UploadResponse
-from app.application.services import run_ingestion
-from app.domain.enums import DocumentStatus
+from app.domain.schemas import DocumentOut
 
 from app.interface.api.routes.businesses import get_business_or_404
 from app.infrastructure.db.database import get_db
@@ -13,8 +16,6 @@ from app.domain.models import Business, Document
 
 
 router = APIRouter(tags=["documents"])
-
-ALLOWED_EXTENSIONS: set[str] = {".csv", ".pdf"}
 
 @router.get("/businesses/{business_id}/documents", response_model=list[DocumentOut])
 def list_documents(
@@ -39,17 +40,19 @@ def get_document(document_id: int, db: Session = Depends(get_db)):
 
 @router.post(
     "/businesses/{business_id}/documents/upload",
-    status_code=status.HTTP_202_ACCEPTED
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
 )
 async def upload_document(
     business_id: int,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    _: Business = Depends(get_business_or_404),
 ):
-    ext = Path(file.filename).suffix.lower()
-    if ext not in ALLOWED_EXTENSIONS:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=f"Unsupported file type '{ext}'")
-    
-    content = await file.read()
-    background_tasks.add_task(run_ingestion, business_id, file.filename, content, ext)
-    return UploadResponse(status=DocumentStatus.PROCESSING)
+    """Dormant during the ledger-core rebuild — feed the ladder via seeded
+    ``bank_transactions`` instead. Returns 501 until ingestion is repointed."""
+    raise HTTPException(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        detail=(
+            "File ingestion is temporarily disabled during the ledger-core "
+            "rebuild. Seed bank_transactions via /businesses/{id}/setup instead."
+        ),
+    )

@@ -1,0 +1,423 @@
+<title>LedgerFlow — Ledger Core & Escalation Ladder</title>
+<style>
+  :root {
+    --paper: #f6f7f9;
+    --card: #ffffff;
+    --ink: #16202e;
+    --ink-soft: #43536a;
+    --ink-faint: #6b7a91;
+    --hair: #dbe1ea;
+    --hair-strong: #c4ccd8;
+    --accent: #1f6a72;      /* deep teal — structure */
+    --accent-soft: #e4f0f0;
+    --debit: #1f6f52;       /* green — debits / posted / balanced */
+    --debit-soft: #e3f2ea;
+    --credit: #a65518;      /* amber — credits / review */
+    --credit-soft: #f7ebdd;
+    --review: #9a5b12;
+    --review-soft: #f8eeda;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --maxw: 74ch;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #0e141c; --card: #161f2b; --ink: #e7edf5; --ink-soft: #a9b6c8;
+      --ink-faint: #7d8da3; --hair: #263243; --hair-strong: #35455a;
+      --accent: #56b6bd; --accent-soft: #16323a; --debit: #57b98c; --debit-soft: #122a20;
+      --credit: #d59355; --credit-soft: #2e2113; --review: #d59355; --review-soft: #2e2113;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0e141c; --card: #161f2b; --ink: #e7edf5; --ink-soft: #a9b6c8;
+    --ink-faint: #7d8da3; --hair: #263243; --hair-strong: #35455a;
+    --accent: #56b6bd; --accent-soft: #16323a; --debit: #57b98c; --debit-soft: #122a20;
+    --credit: #d59355; --credit-soft: #2e2113; --review: #d59355; --review-soft: #2e2113;
+  }
+  :root[data-theme="light"] {
+    --paper: #f6f7f9; --card: #ffffff; --ink: #16202e; --ink-soft: #43536a;
+    --ink-faint: #6b7a91; --hair: #dbe1ea; --hair-strong: #c4ccd8;
+    --accent: #1f6a72; --accent-soft: #e4f0f0; --debit: #1f6f52; --debit-soft: #e3f2ea;
+    --credit: #a65518; --credit-soft: #f7ebdd; --review: #9a5b12; --review-soft: #f8eeda;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 96px; }
+  .col { max-width: var(--maxw); }
+
+  header.hero { padding: 64px 0 40px; border-bottom: 1px solid var(--hair); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--accent); margin: 0 0 14px;
+  }
+  h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.08; margin: 0 0 18px;
+       letter-spacing: -0.02em; text-wrap: balance; }
+  .lede { font-size: clamp(17px, 2.3vw, 20px); color: var(--ink-soft); margin: 0; max-width: 60ch; }
+
+  section { padding: 52px 0 8px; }
+  section + section { border-top: 1px solid var(--hair); }
+  .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .12em;
+            text-transform: uppercase; color: var(--ink-faint); margin: 0 0 8px; }
+  h2 { font-size: clamp(23px, 3.4vw, 31px); margin: 0 0 12px; letter-spacing: -0.015em;
+       text-wrap: balance; }
+  h3 { font-size: 18px; margin: 30px 0 8px; letter-spacing: -0.01em; }
+  p { margin: 0 0 16px; }
+  p.col, ul.col, ol.col { max-width: var(--maxw); }
+  strong { color: var(--ink); font-weight: 650; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--accent-soft);
+         color: var(--accent); padding: 1px 6px; border-radius: 5px; }
+  a { color: var(--accent); }
+
+  .callout {
+    border-left: 3px solid var(--accent); background: var(--card);
+    padding: 16px 20px; border-radius: 0 10px 10px 0; margin: 22px 0;
+    max-width: var(--maxw); box-shadow: 0 1px 0 var(--hair);
+  }
+  .callout .lbl { font-family: var(--mono); font-size: 11px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--accent); display: block; margin-bottom: 4px; }
+  .callout.bright { border-left-color: var(--credit); }
+  .callout.bright .lbl { color: var(--credit); }
+
+  /* T-accounts */
+  .taccounts { display: flex; flex-wrap: wrap; gap: 18px; margin: 22px 0; }
+  .tacc { flex: 1 1 240px; background: var(--card); border: 1px solid var(--hair);
+          border-radius: 12px; overflow: hidden; }
+  .tacc h4 { margin: 0; font-family: var(--mono); font-size: 13px; letter-spacing: .02em;
+             padding: 10px 14px; background: var(--accent-soft); color: var(--accent);
+             border-bottom: 1px solid var(--hair); }
+  .tgrid { display: grid; grid-template-columns: 1fr 1fr; font-family: var(--mono);
+           font-size: 13px; font-variant-numeric: tabular-nums; }
+  .tgrid .head { padding: 6px 14px; font-size: 11px; letter-spacing: .08em;
+                 text-transform: uppercase; color: var(--ink-faint);
+                 border-bottom: 1px solid var(--hair); }
+  .tgrid .dr { color: var(--debit); }
+  .tgrid .cr { color: var(--credit); border-left: 1px solid var(--hair); }
+  .tgrid .cell { padding: 8px 14px; }
+  .tgrid .cr.cell { border-left: 1px solid var(--hair); }
+
+  /* Chips */
+  .chip { display: inline-block; font-family: var(--mono); font-size: 12px;
+          padding: 2px 9px; border-radius: 999px; border: 1px solid var(--hair-strong);
+          color: var(--ink-soft); background: var(--card); }
+  .chip.dr { color: var(--debit); border-color: var(--debit); background: var(--debit-soft); }
+  .chip.cr { color: var(--credit); border-color: var(--credit); background: var(--credit-soft); }
+  .chip.post { color: var(--debit); border-color: var(--debit); background: var(--debit-soft); }
+  .chip.rev { color: var(--review); border-color: var(--review); background: var(--review-soft); }
+
+  /* COA tree */
+  .tree { font-family: var(--mono); font-size: 13.5px; background: var(--card);
+          border: 1px solid var(--hair); border-radius: 12px; padding: 18px 20px;
+          margin: 20px 0; overflow-x: auto; line-height: 1.9; }
+  .tree .l1 { color: var(--ink); font-weight: 650; }
+  .tree .l2 { color: var(--ink-soft); padding-left: 2.5ch; }
+  .tree .l3 { color: var(--ink-faint); padding-left: 5ch; }
+  .tree .code { color: var(--accent); }
+  .tree .tag { color: var(--credit); }
+  .tree .leaf { color: var(--debit); font-size: 11px; }
+
+  /* split cards */
+  .cards2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin: 22px 0; }
+  @media (max-width: 640px) { .cards2 { grid-template-columns: 1fr; } }
+  .mini { background: var(--card); border: 1px solid var(--hair); border-radius: 12px;
+          padding: 18px 20px; }
+  .mini h4 { margin: 0 0 6px; font-size: 15px; }
+  .mini .role { font-family: var(--mono); font-size: 11px; letter-spacing: .08em;
+                text-transform: uppercase; color: var(--accent); }
+  .mini p { font-size: 14.5px; color: var(--ink-soft); margin: 8px 0 0; }
+  .mini ul { margin: 8px 0 0; padding-left: 18px; font-size: 14px; color: var(--ink-soft); }
+
+  pre.mermaid { background: var(--card); border: 1px solid var(--hair); border-radius: 12px;
+                padding: 20px; margin: 22px 0; overflow-x: auto; text-align: center; }
+
+  .rulebar { display: grid; gap: 10px; margin: 22px 0; }
+  .rule { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center;
+          background: var(--card); border: 1px solid var(--hair); border-left-width: 3px;
+          border-radius: 10px; padding: 12px 16px; }
+  .rule.p { border-left-color: var(--debit); }
+  .rule.r { border-left-color: var(--review); }
+  .rule .cond { font-family: var(--mono); font-size: 12.5px; color: var(--ink-soft); }
+  .rule .out { font-size: 13px; color: var(--ink); }
+
+  .num { font-variant-numeric: tabular-nums; }
+  footer { margin-top: 60px; padding-top: 22px; border-top: 1px solid var(--hair);
+           font-size: 13px; color: var(--ink-faint); }
+
+  ul.col li, ol.col li { margin: 6px 0; }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <p class="eyebrow">LedgerFlow · Engineering explainer</p>
+    <h1>A double-entry ledger, and the ladder that fills it</h1>
+    <p class="lede">How a raw bank row becomes a balanced, auditable journal entry —
+      deterministic where money is involved, AI only where judgment is, and never
+      posted without a gate.</p>
+  </header>
+
+  <section>
+    <p class="kicker">The one-paragraph version</p>
+    <h2>What the system does</h2>
+    <p class="col">Every financial fact is stored as a <strong>balanced journal entry</strong>:
+      equal debits and credits, following 500-year-old double-entry accounting. Raw
+      <strong>bank rows</strong> come in uncategorized. An <strong>escalation ladder</strong>
+      decides, per row, which account the other side of the entry belongs to — trying cheap
+      deterministic rules first, an AI agent next, and a human last. The
+      <strong>ledger</strong> then reads those posted entries to produce the official numbers
+      (P&amp;L, trial balance). Two rules never bend: <em>money math is never done by the AI</em>,
+      and <em>nothing hits the books without a high-confidence rule or a human approval.</em></p>
+
+    <pre class="mermaid">
+flowchart LR
+  BR["Bank row<br/>(uncategorized)"] --> L["Escalation<br/>ladder"]
+  L -->|"confident"| JE["Balanced<br/>journal entry"]
+  L -->|"unsure"| RQ["Review queue<br/>(human)"]
+  RQ -->|"approve"| JE
+  JE --> RPT["Ledger reports<br/>P&amp;L · Trial balance"]
+  RQ -. "correction becomes a rule" .-> L
+    </pre>
+  </section>
+
+  <section>
+    <p class="kicker">Foundation</p>
+    <h2>Double-entry in sixty seconds</h2>
+    <p class="col">A journal entry records one economic event as two-or-more lines. Each line is
+      a <span class="chip dr">debit</span> or a <span class="chip cr">credit</span> — never both.
+      The iron law: <strong>total debits must equal total credits.</strong> That is the only reason
+      the books always balance.</p>
+
+    <p class="col">Example — the business pays a <span class="num">$42</span> AWS bill from checking:</p>
+    <div class="taccounts">
+      <div class="tacc">
+        <h4>5330 · Cloud Hosting <span style="color:var(--ink-faint)">(expense)</span></h4>
+        <div class="tgrid">
+          <div class="head dr">Debit</div><div class="head cr">Credit</div>
+          <div class="dr cell">42.00</div><div class="cr cell"></div>
+        </div>
+      </div>
+      <div class="tacc">
+        <h4>1110 · Operating Checking <span style="color:var(--ink-faint)">(asset)</span></h4>
+        <div class="tgrid">
+          <div class="head dr">Debit</div><div class="head cr">Credit</div>
+          <div class="dr cell"></div><div class="cr cell">42.00</div>
+        </div>
+      </div>
+    </div>
+    <p class="col">Debits <span class="num">42</span> = credits <span class="num">42</span> → balanced.
+      The expense went up; the bank went down. Whether a debit <em>increases</em> or
+      <em>decreases</em> an account depends on the account's <strong>normal balance</strong> — the
+      single fact everything else derives from:</p>
+    <ul class="col">
+      <li><strong>Assets &amp; expenses</strong> are <em>debit-normal</em> → a debit increases them.</li>
+      <li><strong>Liabilities, equity &amp; revenue</strong> are <em>credit-normal</em> → a credit increases them.</li>
+    </ul>
+    <div class="callout">
+      <span class="lbl">Owner-confirmed posting rule (cash basis)</span>
+      Money <strong>in</strong> → <span class="chip dr">Dr</span> Cash / <span class="chip cr">Cr</span> Revenue.
+      Money <strong>out</strong> → <span class="chip cr">Cr</span> Cash / <span class="chip dr">Dr</span> Expense.
+      The cash side is always fixed by direction; only the <em>counter</em> account is classified by the ladder.
+    </div>
+  </section>
+
+  <section>
+    <p class="kicker">The data model</p>
+    <h2>Three tables are the accounting</h2>
+    <div class="cards2">
+      <div class="mini">
+        <span class="role">accounts</span>
+        <h4>Chart of accounts</h4>
+        <p>A 3-level tree. You post only to the <em>leaves</em>. Reports roll leaf balances up
+          into groups and totals.</p>
+      </div>
+      <div class="mini">
+        <span class="role">journal_entries</span>
+        <h4>Entry header</h4>
+        <p>One per event. Carries a <strong>status</strong>: draft → pending → <span class="chip post">posted</span>.
+          Only <em>posted</em> entries count in reports.</p>
+      </div>
+      <div class="mini">
+        <span class="role">journal_entry_lines</span>
+        <h4>The debit/credit lines</h4>
+        <p>Each line is one side, one account. DB constraints enforce: never both sides, never empty.</p>
+      </div>
+      <div class="mini">
+        <span class="role">JournalEntryBuilder</span>
+        <h4>The gatekeeper</h4>
+        <p>Refuses to build an entry unless it <strong>balances</strong> and every account is a
+          posting leaf. Callers never touch raw signs.</p>
+      </div>
+    </div>
+
+    <h3>The hierarchy — and where <code>account_subtype</code> comes from</h3>
+    <p class="col">Every account has a <strong>type</strong> (which statement it belongs to) and,
+      one level down, a <strong>subtype</strong> — a machine-readable role owned by the
+      <em>level-2 group</em> and inherited by its leaves. That is the clean, deterministic basis:
+      the tree itself decides the subtype.</p>
+    <div class="tree">
+<span class="l1"><span class="code">1000</span> Assets <span style="color:var(--ink-faint)">— type: asset</span></span>
+<span class="l2"><span class="code">1100</span> Cash &amp; Bank <span class="tag">→ subtype: CASH</span></span>
+<span class="l3"><span class="code">1110</span> Operating Checking <span class="leaf">◆ posting leaf</span></span>
+<span class="l3"><span class="code">1120</span> Business Savings <span class="leaf">◆ posting leaf</span></span>
+<span class="l2"><span class="code">1200</span> Receivables <span class="tag">→ subtype: RECEIVABLE</span></span>
+<span class="l3"><span class="code">1210</span> Accounts Receivable <span class="leaf">◆ posting leaf · control</span></span>
+<span class="l1"><span class="code">5000</span> Operating Expenses <span style="color:var(--ink-faint)">— type: expense</span></span>
+<span class="l2"><span class="code">5300</span> Technology <span class="tag">→ subtype: TECHNOLOGY</span></span>
+<span class="l3"><span class="code">5320</span> Software &amp; SaaS <span class="leaf">◆ posting leaf</span></span>
+<span class="l3"><span class="code">5330</span> Cloud Hosting <span class="leaf">◆ posting leaf</span></span>
+    </div>
+    <p class="col"><strong>type</strong> answers “which financial statement?”
+      <strong>subtype</strong> answers “which functional bucket within it?” — and it's derived
+      straight from the level-2 parent, so it's 100% populated and never guessed.</p>
+  </section>
+
+  <section>
+    <p class="kicker">ledger.py, demystified</p>
+    <h2>The ledger: read-only, deterministic, tested</h2>
+    <p class="col">This is the file you found confusing. It is deliberately split into
+      <strong>two roles</strong> so the accounting math has zero dependency on the database and can
+      be unit-tested with fakes:</p>
+    <div class="cards2">
+      <div class="mini">
+        <span class="role">SqlAlchemyLedgerRepository</span>
+        <h4>Fetches numbers</h4>
+        <p>Talks to Postgres. Returns plain records: the list of accounts, and the summed
+          debit/credit per account over <em>posted</em> entries. No math, no signs.</p>
+      </div>
+      <div class="mini">
+        <span class="role">LedgerService</span>
+        <h4>Does the math</h4>
+        <p>Pure functions over those numbers. Applies the sign rule, rolls the tree up, and
+          returns typed reports. Depends on the repository <em>interface</em>, not the DB.</p>
+      </div>
+    </div>
+
+    <h3>Step 1 — the one sign rule (lives in exactly one place)</h3>
+    <div class="tree" style="line-height:1.8">
+<span>signed_balance(account, totals):</span>
+<span>  if account is <span class="tag">debit-normal</span>  → debit − credit</span>
+<span>  if account is <span class="tag">credit-normal</span> → credit − debit</span>
+    </div>
+    <p class="col">A positive result means the account sits on its normal side. Cash with
+      <span class="num">1000</span> debits and <span class="num">300</span> credits →
+      <span class="num">+700</span> (an asset balance of 700).</p>
+
+    <h3>Step 2 — roll the leaves up the tree</h3>
+    <p class="col">Each leaf gets its signed balance; then children are summed into parents,
+      deepest level first. A group's balance is just the sum of its leaves — no double counting,
+      because only leaves hold postings.</p>
+    <pre class="mermaid">
+flowchart TD
+  A["5320 Software 500"] --> G["5300 Technology 800"]
+  B["5330 Cloud 300"] --> G
+  G --> T["5000 Expenses (total)"]
+    </pre>
+
+    <h3>Step 3 — four primitives, everything else derives from them</h3>
+    <ul class="col">
+      <li><code>balance(account)</code> — one account's rolled-up balance.</li>
+      <li><code>account_tree()</code> — the whole COA with balances at every node.</li>
+      <li><code>pnl(start, end)</code> — revenue subtree − expense subtree = net income.</li>
+      <li><code>trial_balance(as_of)</code> — every account's ending balance; asserts Σdebits = Σcredits.</li>
+    </ul>
+    <div class="callout">
+      <span class="lbl">Why the split matters</span>
+      Because <code>LedgerService</code> depends on an interface, its tests inject a fake repository
+      with canned numbers — so the P&amp;L rollup and the balancing assertion are proven with
+      <strong>no database at all</strong>. The money math is the trusted core; it must be identical every time.
+    </div>
+  </section>
+
+  <section>
+    <p class="kicker">The escalation ladder</p>
+    <h2>How a bank row gets classified</h2>
+    <p class="col">The ladder is a <strong>Chain of Responsibility</strong>: three handlers in a line.
+      Each one either <em>resolves</em> the row or <em>passes it down</em>. Cheapest and most certain
+      first; human last. This is the pattern to show your lead — it's why adding a new step later
+      never touches the existing ones.</p>
+
+    <pre class="mermaid">
+flowchart TD
+  BT["Bank row<br/>description · amount · in/out"] --> RULE{"1 · RuleHandler<br/>regex rule match?"}
+  RULE -->|"no match"| AGENT
+  RULE -->|"match · confidence ≥ 0.75<br/>· amount ≤ 5,000"| POST["Auto-post balanced entry<br/>→ POSTED"]
+  RULE -->|"match but low confidence<br/>OR amount &gt; 5,000"| AGENT
+  AGENT{"2 · AgentHandler<br/>no rule yet → LLM picks account"} --> REVIEW
+  REVIEW["3 · ReviewHandler<br/>create review item"] --> HUMAN["Human approves in chat<br/>(interrupt gate)"]
+  HUMAN --> POST2["Build + post entry"]
+  POST2 -.->|"correction becomes a new rule"| RULE
+  POST --> BOOKS(("On the books"))
+  POST2 --> BOOKS
+    </pre>
+
+    <h3>What each rung decides</h3>
+    <div class="rulebar">
+      <div class="rule p">
+        <span class="chip post">post</span>
+        <span class="cond">rule match · conf ≥ 0.75 · amount ≤ $5,000</span>
+        <span class="out">Auto-posts a balanced entry. Fast, free, auditable.</span>
+      </div>
+      <div class="rule r">
+        <span class="chip rev">review</span>
+        <span class="cond">rule match · amount &gt; $5,000</span>
+        <span class="out"><strong>Large-amount override</strong> — big money always sees a human.</span>
+      </div>
+      <div class="rule r">
+        <span class="chip rev">review</span>
+        <span class="cond">rule match · confidence &lt; 0.75</span>
+        <span class="out">Parked for review, carrying the rule's suggestion.</span>
+      </div>
+      <div class="rule r">
+        <span class="chip rev">review</span>
+        <span class="cond">no rule → agent picks an account</span>
+        <span class="out">Agent proposes; still goes to a human. It never posts.</span>
+      </div>
+    </div>
+
+    <div class="callout bright">
+      <span class="lbl">The bright line</span>
+      The AI only ever <strong>chooses which account</strong>. It never computes an amount and never
+      decides the balance — those come from the bank row and the builder. And nothing reaches the
+      books without either a high-confidence deterministic rule or a human clicking approve.
+    </div>
+
+    <h3>The flywheel</h3>
+    <p class="col">When a human corrects a review item, that correction is written back as a new
+      deterministic <strong>rule</strong>. So the same vendor auto-posts next time. The rule layer
+      grows, the agent is needed less, and every decision is traceable to <em>why</em> the system
+      remembers it.</p>
+  </section>
+
+  <section>
+    <p class="kicker">One picture to remember</p>
+    <h2>Who owns what</h2>
+    <pre class="mermaid">
+flowchart LR
+  subgraph AI["AI agent — judgment"]
+    Q["Understand · plan · present<br/>pick an account"]
+  end
+  subgraph DET["Deterministic code — trusted"]
+    F["Fetch rows"]
+    M["Money math<br/>ledger primitives"]
+    B["Balance &amp; post<br/>builder + posting"]
+  end
+  subgraph HUM["Human — authority"]
+    G["Approve before it posts"]
+  end
+  Q --> B
+  F --> M
+  B --> G --> M
+    </pre>
+    <p class="col">AI reasons and presents. Deterministic code fetches, computes, and balances.
+      The human authorizes anything that writes to the books. That separation is the whole design.</p>
+  </section>
+
+  <footer>
+    LedgerFlow — ledger core &amp; escalation ladder. Cash-basis; bills/invoices &amp; accrual are the
+    next milestone. Every figure and rule above matches the code in
+    <code>app/application/accounting/</code>.
+  </footer>
+</div>

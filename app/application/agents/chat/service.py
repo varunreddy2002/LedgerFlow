@@ -45,7 +45,7 @@ def handle_chat(
 
     result = run_chat(message, business_id, session.thread_id)
 
-    if result["status"] == "pending_chart":
+    if result["status"] == "interrupt":
         db.commit()
         return session.id, None, result["interrupt"]
 

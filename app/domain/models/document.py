@@ -27,7 +27,6 @@ class Document(Base, PrimaryKeyMixin, TimestampMixin):
 
     business: Mapped["Business"] = relationship(back_populates="documents")
     extractions: Mapped[List["DocumentExtraction"]] = relationship(back_populates="document")
-    transactions: Mapped[List["Transaction"]] = relationship(back_populates="document")
 
 
 class DocumentExtraction(Base, PrimaryKeyMixin, TimestampMixin):
@@ -44,4 +43,3 @@ class DocumentExtraction(Base, PrimaryKeyMixin, TimestampMixin):
 
 
 from app.domain.models.business import Business  # noqa: E402,F401
-from app.domain.models.transaction import Transaction  # noqa: E402,F401

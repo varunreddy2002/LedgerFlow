@@ -1,17 +1,18 @@
-"""Schemas for businesses, accounts, categories, vendors and customers."""
+"""Pydantic schemas for businesses, chart-of-accounts accounts, and parties."""
 
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel
 
-from app.domain.enums import AccountType, CategoryType
+from app.domain.enums import AccountType, NormalBalance
 from app.domain.schemas.base import ORMModel
 
 
 # --- Business -------------------------------------------------------------
 class BusinessBase(BaseModel):
     name: str
+    legal_name: Optional[str] = None
     business_type: Optional[str] = None
     currency: str = "USD"
 
@@ -26,41 +27,22 @@ class BusinessOut(ORMModel, BusinessBase):
     updated_at: datetime
 
 
-# --- Account --------------------------------------------------------------
-class AccountBase(BaseModel):
+# --- Account (chart of accounts) ------------------------------------------
+class AccountOut(ORMModel):
+    """A chart-of-accounts node (read-only; the COA is seeded, not user-created)."""
+
+    id: int
+    business_id: int
+    account_code: str
     account_name: str
     account_type: AccountType
-    institution_name: Optional[str] = None
-    last_four: Optional[str] = None
-    currency: str = "USD"
-
-
-class AccountCreate(AccountBase):
-    pass
-
-
-class AccountOut(ORMModel, AccountBase):
-    id: int
-    business_id: int
-    created_at: datetime
-
-
-# --- Category -------------------------------------------------------------
-class CategoryBase(BaseModel):
-    business_id: int
-    name: str
-    parent_category_id: Optional[int] = None
-    category_type: CategoryType
-    is_system: bool = False
-
-
-class CategoryCreate(CategoryBase):
-    pass
-
-
-class CategoryOut(ORMModel, CategoryBase):
-    id: int
-    created_at: datetime
+    account_subtype: Optional[str] = None
+    parent_account_id: Optional[int] = None
+    hierarchy_level: int
+    normal_balance: NormalBalance
+    posting_allowed: bool
+    is_control_account: bool
+    is_active: bool
 
 
 # --- Vendor ---------------------------------------------------------------
@@ -68,8 +50,6 @@ class VendorBase(BaseModel):
     business_id: int
     name: str
     normalized_name: Optional[str] = None
-    default_category_id: Optional[int] = None
-    vendor_type: Optional[str] = None
 
 
 class VendorCreate(VendorBase):
@@ -86,7 +66,6 @@ class CustomerBase(BaseModel):
     business_id: int
     name: str
     normalized_name: Optional[str] = None
-    source: Optional[str] = None
 
 
 class CustomerCreate(CustomerBase):
