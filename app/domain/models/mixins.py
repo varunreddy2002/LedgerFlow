@@ -10,9 +10,9 @@ schema is ready for PostgreSQL migration without changing row values.
 
 import enum
 from datetime import datetime
-from typing import Type, TypeVar
+from typing import Optional, Type, TypeVar
 
-from sqlalchemy import BigInteger, DateTime, Enum, func
+from sqlalchemy import BigInteger, DateTime, Enum, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 E = TypeVar("E", bound=enum.Enum)
@@ -51,3 +51,14 @@ class TimestampMixin(CreatedAtMixin):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class ActorMixin:
+    """Free-text actor tags ('owner', 'system', 'rule_engine', a user id as a
+    string, ...), not a FK to ``users``. There's no auth wired up yet, so this
+    can't be enforced or populated automatically — it's here because the design
+    doc lists created_by/updated_by on every table, but every value is nullable
+    and unused until an actor concept actually exists in the app."""
+
+    created_by: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    updated_by: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)

@@ -23,19 +23,17 @@ class Settings(BaseSettings):
     # below it they stay as needs_review for human inspection.
     categorization_confidence_threshold: float = 0.75
 
-    # Transactions with an absolute amount above this value always get a
-    # large_transaction ReviewItem regardless of confidence score.
+    # How many still-unmatched bank_transactions go into a single AI
+    # suggestion call, after the rule engine's had its pass. Keeps LLM calls
+    # to a handful per upload instead of one per leftover row.
+    categorization_ai_batch_size: int = 5
+
     large_transaction_threshold: float = 5000.0
 
     # Seconds before the in-process categorization rule cache expires.
     # On expiry the engine reloads rules from the DB on next use.
     rule_cache_ttl_seconds: int = 300  # 5 minutes
 
-    # OCR — vLLM (RunPod or EC2, OpenAI-compatible)
-    ocr_provider: str = "vllm"
-    vllm_base_url: str = ""
-    vllm_api_key: str = ""
-    ocr_model: str = "h2oai/h2ovl-mississippi-800m"
 
     # Chat — which provider to use ("bedrock" or "openai")
     chat_provider: str = "bedrock"

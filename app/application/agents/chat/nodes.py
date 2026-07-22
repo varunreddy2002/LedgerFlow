@@ -23,66 +23,89 @@ _haiku = ChatBedrockConverse(
 )
 
 SCHEMA = """
-DATABASE SCHEMA (PostgreSQL). Every table has an integer primary key `id`.
+DATABASE SCHEMA (PostgreSQL). Every table has a bigint primary key `id`.
+This is a double-entry ledger core, not a flat transaction list.
 
 ========== CORE FINANCIAL TABLES ==========
 
 businesses(id, name, business_type, currency)
 
-accounts(id, business_id, account_name, account_type, institution_name, last_four, currency)
-    - account_type: 'checking' | 'savings' | 'credit_card' | 'cash' | 'other'
+accounts(id, business_id, account_code, account_name, account_type, account_subtype,
+         parent_account_id, hierarchy_level, normal_balance, posting_allowed, is_active)
+    - the chart of accounts (COA), a fixed 3-level tree via parent_account_id
+    - account_type: 'asset' | 'liability' | 'revenue' | 'expense' (no separate 'equity' type —
+      owner's equity lives under 'liability' with account_subtype='equity')
+    - normal_balance: 'debit' | 'credit' — which side increases this account's balance
+      (stored per-account so contra accounts, e.g. Owner Draws, can override the type default)
+    - only posting_allowed=true rows (level-3 leaves) can be posted to; levels 1-2 are rollup-only
+
+bank_transactions(id, business_id, document_id, account_id, external_transaction_id,
+                   transaction_date, posted_date, description, normalized_description,
+                   amount, direction, fingerprint_hash, status)
+    - raw rows imported from a bank statement CSV — source evidence, NOT yet an accounting
+      interpretation. account_id is the cash/bank leaf this statement belongs to (e.g. Operating Checking)
+    - amount: NUMERIC(14,2), always POSITIVE; direction: 'inflow' | 'outflow' carries the sign
+    - status: 'new' | 'processing' | 'review_required' | 'processed' | 'excluded' | 'failed'
+      ('processed' means a transactions/transaction_entries pair now exists for this row)
+
+transactions(id, business_id, bank_transaction_id, transaction_date, name, description,
+             status, confidence_score, reviewed_by, reviewed_at, review_notes, posted_at)
+    - the accounting event header (e.g. "AWS payment"). Carries NO amount itself —
+      amounts live on transaction_entries. Has business_id directly.
+    - status: 'proposed' | 'review_required' | 'approved' | 'rejected' | 'posted' | 'reversed' | 'failed'
+
+transaction_entries(id, transaction_id, account_id, amount, description)
+    - one debit or credit line inside a transaction. amount is SIGNED:
+      positive = debit, negative = credit. A balanced transaction's entries sum to 0.
+    - NO business_id — join transaction_id -> transactions.business_id to scope
+
+accounting_rules(id, business_id, rule_name, rule_type, conditions, actions, priority, status)
+    - deterministic classification rules matched against bank_transactions.normalized_description
+    - conditions/actions are JSONB; status: 'active' | 'inactive' | 'archived'
+
+invoices(id, business_id, document_id, customer_id, invoice_number, invoice_date, due_date,
+         status, bank_transaction_id, accounting_transaction_id)
+    - a customer invoice. Cash-basis rule: creating this does NOT create revenue —
+      only once bank_transaction_id/accounting_transaction_id are linked to an actual payment
+    - status: 'draft' | 'unpaid' | 'paid' | 'void'
+invoice_lines(id, invoice_id, line_number, description, quantity, unit_price, tax_amount, revenue_account_id)
+    - line total = quantity * unit_price; not stored, derive it. NO business_id — join via invoice_id.
+
+bills(id, business_id, document_id, vendor_id, bill_number, bill_date, due_date,
+      status, bank_transaction_id, accounting_transaction_id)
+    - a vendor bill. Same cash-basis rule as invoices: no expense until linked to a payment.
+bill_lines(id, bill_id, line_number, description, quantity, unit_price, tax_amount, expense_account_id)
+    - NO business_id — join via bill_id.
+
+vendors(id, business_id, vendor_name, normalized_name, email, phone, default_account_id, status)
+customers(id, business_id, customer_name, normalized_name, email, phone, status)
 
 documents(id, business_id, party_id, source, filename, status, uploaded_at, processed_at)
     - source: 'bank_statement' | 'credit_card' | 'vendor_bill' | 'invoice'
     - status: 'uploaded' | 'processing' | 'processed' | 'failed'
 
-transactions(id, document_id, party_id, vendor_id, customer_id, description,
-             date, due_date, amount, trans_type, category_id, review_status, fingerprint_hash)
-    - amount: NUMERIC(14,2), always POSITIVE
-    - trans_type: 'debit'   -> money OUT of bank (bank statement / credit card)
-                  'credit'  -> money IN to bank (bank statement / credit card)
-                  'payable' -> we owe (from vendor bill PDF, no cash movement yet)
-                  'receivable' -> owed to us (from invoice PDF, no cash movement yet)
-    - review_status: 'uncategorized' | 'needs_review' | 'auto_approved' | 'user_approved' | 'user_corrected' | 'ignored'
-    - transactions have NO business_id -> JOIN documents to scope by business
-    - FKs: document_id->documents.id, category_id->categories.id,
-           vendor_id->vendors.id, customer_id->customers.id
-
-transaction_line_items(id, transaction_id, description, quantity, unit_price, tax_amount, category_id, review_status)
-    - one row per line item from PDF invoices / bills
-    - amount per line = quantity * unit_price
-    - FKs: transaction_id->transactions.id, category_id->categories.id
-
-categories(id, business_id, name, parent_category_id, category_type)
-    - category_type: 'revenue' | 'expense' | 'transfer' | 'owner_draw'
-    - self-referential tree via parent_category_id
-
-vendors(id, business_id, name)
-customers(id, business_id, name)
-
 document_extractions(id, document_id, extraction_type, raw_text, extracted_json, model_used, confidence_score)
-    - raw OCR/LLM output per PDF document (audit trail)
-    - extracted_json is JSONB
+    - raw OCR/LLM output per document (audit trail). extracted_json is JSON. NO business_id — join via document_id.
 
-categorization_rules(id, business_id, pattern, match_field, category_id, confidence, priority, is_system)
-    - regex rules that auto-assign categories
-    - lower priority tried first
+audit_events(id, business_id, entity_type, entity_id, event_type, actor_type, actor_id,
+             old_values, new_values, reason, correlation_id)
+    - append-only, polymorphic by (entity_type, entity_id) — no FK on entity_id.
 
 ========== SYSTEM TABLES (ignore unless explicitly asked) ==========
 
 users(id, business_id, name, email, is_active)
 chat_sessions(id, thread_id, business_id, user_id, title)
 chat_messages(id, session_id, role, message, agent_name, token_usage, metadata_json)
-audit_logs(id, business_id, user_id, action, entity_type, entity_id, old_value, new_value)
 
 ========== KEY RULES ==========
-- Scope transactions to a business by joining documents:
-      JOIN documents d ON d.id = transactions.document_id WHERE d.business_id = <business_id>
-- categories, vendors, customers, accounts have business_id directly.
-- Bank / cash rows:  d.source IN ('bank_statement','credit_card')  -> trans_type IN ('debit','credit')
-- Invoices / bills:  d.source IN ('vendor_bill','invoice')          -> trans_type IN ('payable','receivable')
-- Cash-basis P&L counts only bank / cash rows. Invoices / bills are expectations, not cash.
-- For line-item detail on PDFs, JOIN transaction_line_items ON transaction_id.
+- Most tables have business_id directly (accounts, bank_transactions, transactions, invoices,
+  bills, vendors, customers, accounting_rules, documents, audit_events). transaction_entries,
+  invoice_lines, and bill_lines do NOT — join up to their parent row to scope by business.
+- IMPORTANT — current implementation state: categorization/posting is not wired up yet.
+  Expect most bank_transactions to have status='new' with no matching transactions row, and
+  transaction_entries/accounting_rules to be empty or sparse. Don't assume posted ledger data
+  exists just because bank_transactions do.
+- Cash-basis only: no accrual, depreciation, or deferred-revenue concepts anywhere in this schema.
 """
 
 SYSTEM_PROMPT = f"""You are a financial analyst assistant for a small business.

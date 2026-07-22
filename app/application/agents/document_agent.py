@@ -23,13 +23,23 @@ def map_columns(headers: list, data_chunk: list) -> CSVColumnMapping:
 
     return llm_client.invoke_structured(message, prompt, CSVColumnMapping)
 
+#------------------------------------------------
 _EXTRACTION_PROMPT = """You are a financial document extraction assistant.
-You will be given an invoice or a bill as a PDF.
-Extract the data exactly as it appears on the document. Do not guess or calculate.
-Use null for any field that is not visible on the document.
-Dates must be in YYYY-MM-DD format.
-For each line item, extract its description, quantity, net price (per unit, before tax), and tax amount if shown."""
+You will be given an invoice or a bill as a PDF. Extract the data exactly as
+it appears on the document — never invent a value with no basis in the
+document. If a field genuinely isn't present anywhere on the document (e.g.
+no due date is shown), leave it null.
 
+* seller_name / buyer_name: the clean company or individual name only
+  (e.g. "Acme Supplies LLC") — not the full address block or contact details.
+* Dates must be in YYYY-MM-DD format.
+* For each line item, extract description, quantity, net price (per unit,
+  before tax), and tax amount if shown separately.
+  - Some lines show only a single flat amount instead of a quantity/unit-price
+    breakdown. In that case, that amount IS the net_price and quantity is 1 —
+    this is reading what's on the line, not calculating a new value.
+* If the document contains more than one invoice/bill, extract only the first one.
+"""
 
 def extract_document(pdf_bytes: bytes, business_name: str, filename: str) -> ExtractedDocument:
     pdf_b64 = base64.b64encode(pdf_bytes).decode("utf-8")
