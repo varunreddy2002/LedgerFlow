@@ -7,6 +7,8 @@ from langgraph.graph.message import add_messages
 class ChatState(TypedDict):
     messages: Annotated[list, add_messages]
     business_id: int
+    # pending write awaiting user confirmation: {"tool","args","summary"}
+    pending_write: Optional[dict]
     chart_description: Optional[str]
     chart_data: Optional[str]
     chart_code: Optional[str]

@@ -1,131 +1,41 @@
 """Chat graph nodes. Each node returns Command(goto, update) so the routing
-lives with the node that owns the decision — no separate router functions."""
+lives with the node that owns the decision — no separate router functions.
+
+Tool execution uses LangGraph's prebuilt ToolNode: it runs ALL tool calls in a
+turn (parallel-safe), injects InjectedState/InjectedStore args, and formats one
+ToolMessage per call. run_tools wraps it only to special-case request_chart,
+which routes into the chart branch instead of being answered inline.
+"""
 
 import json
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import ToolMessage, SystemMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END
+from langgraph.prebuilt import ToolNode
 from langgraph.types import Command, interrupt
 
 from app.core.config import settings
 from app.core.logging import get_logger
 from app.application.agents.chat.state import ChatState
-from app.application.agents.chat.tool import query_database, get_pnl, request_chart
+from app.application.agents.chat.prompts import system_prompt
+from app.application.agents.chat.tools import ALL_TOOLS
+from app.application.agents.chat.tools.writes import WRITE_TOOLS
+from app.application.agents.chat.skills import registry
 from app.application.agents import sandbox_service
 
 logger = get_logger(__name__)
 
-_haiku = ChatBedrockConverse(
+_llm = ChatBedrockConverse(
     model=settings.default_chat_model,
     region_name=settings.aws_region,
     temperature=0,
 )
 
-SCHEMA = """
-DATABASE SCHEMA (PostgreSQL). Every table has a bigint primary key `id`.
-This is a double-entry ledger core, not a flat transaction list.
-
-========== CORE FINANCIAL TABLES ==========
-
-businesses(id, name, business_type, currency)
-
-accounts(id, business_id, account_code, account_name, account_type, account_subtype,
-         parent_account_id, hierarchy_level, normal_balance, posting_allowed, is_active)
-    - the chart of accounts (COA), a fixed 3-level tree via parent_account_id
-    - account_type: 'asset' | 'liability' | 'revenue' | 'expense' (no separate 'equity' type —
-      owner's equity lives under 'liability' with account_subtype='equity')
-    - normal_balance: 'debit' | 'credit' — which side increases this account's balance
-      (stored per-account so contra accounts, e.g. Owner Draws, can override the type default)
-    - only posting_allowed=true rows (level-3 leaves) can be posted to; levels 1-2 are rollup-only
-
-bank_transactions(id, business_id, document_id, account_id, external_transaction_id,
-                   transaction_date, posted_date, description, normalized_description,
-                   amount, direction, fingerprint_hash, status)
-    - raw rows imported from a bank statement CSV — source evidence, NOT yet an accounting
-      interpretation. account_id is the cash/bank leaf this statement belongs to (e.g. Operating Checking)
-    - amount: NUMERIC(14,2), always POSITIVE; direction: 'inflow' | 'outflow' carries the sign
-    - status: 'new' | 'processing' | 'review_required' | 'processed' | 'excluded' | 'failed'
-      ('processed' means a transactions/transaction_entries pair now exists for this row)
-
-transactions(id, business_id, bank_transaction_id, transaction_date, name, description,
-             status, confidence_score, reviewed_by, reviewed_at, review_notes, posted_at)
-    - the accounting event header (e.g. "AWS payment"). Carries NO amount itself —
-      amounts live on transaction_entries. Has business_id directly.
-    - status: 'proposed' | 'review_required' | 'approved' | 'rejected' | 'posted' | 'reversed' | 'failed'
-
-transaction_entries(id, transaction_id, account_id, amount, description)
-    - one debit or credit line inside a transaction. amount is SIGNED:
-      positive = debit, negative = credit. A balanced transaction's entries sum to 0.
-    - NO business_id — join transaction_id -> transactions.business_id to scope
-
-accounting_rules(id, business_id, rule_name, rule_type, conditions, actions, priority, status)
-    - deterministic classification rules matched against bank_transactions.normalized_description
-    - conditions/actions are JSONB; status: 'active' | 'inactive' | 'archived'
-
-invoices(id, business_id, document_id, customer_id, invoice_number, invoice_date, due_date,
-         status, bank_transaction_id, accounting_transaction_id)
-    - a customer invoice. Cash-basis rule: creating this does NOT create revenue —
-      only once bank_transaction_id/accounting_transaction_id are linked to an actual payment
-    - status: 'draft' | 'unpaid' | 'paid' | 'void'
-invoice_lines(id, invoice_id, line_number, description, quantity, unit_price, tax_amount, revenue_account_id)
-    - line total = quantity * unit_price; not stored, derive it. NO business_id — join via invoice_id.
-
-bills(id, business_id, document_id, vendor_id, bill_number, bill_date, due_date,
-      status, bank_transaction_id, accounting_transaction_id)
-    - a vendor bill. Same cash-basis rule as invoices: no expense until linked to a payment.
-bill_lines(id, bill_id, line_number, description, quantity, unit_price, tax_amount, expense_account_id)
-    - NO business_id — join via bill_id.
-
-vendors(id, business_id, vendor_name, normalized_name, email, phone, default_account_id, status)
-customers(id, business_id, customer_name, normalized_name, email, phone, status)
-
-documents(id, business_id, party_id, source, filename, status, uploaded_at, processed_at)
-    - source: 'bank_statement' | 'credit_card' | 'vendor_bill' | 'invoice'
-    - status: 'uploaded' | 'processing' | 'processed' | 'failed'
-
-document_extractions(id, document_id, extraction_type, raw_text, extracted_json, model_used, confidence_score)
-    - raw OCR/LLM output per document (audit trail). extracted_json is JSON. NO business_id — join via document_id.
-
-audit_events(id, business_id, entity_type, entity_id, event_type, actor_type, actor_id,
-             old_values, new_values, reason, correlation_id)
-    - append-only, polymorphic by (entity_type, entity_id) — no FK on entity_id.
-
-========== SYSTEM TABLES (ignore unless explicitly asked) ==========
-
-users(id, business_id, name, email, is_active)
-chat_sessions(id, thread_id, business_id, user_id, title)
-chat_messages(id, session_id, role, message, agent_name, token_usage, metadata_json)
-
-========== KEY RULES ==========
-- Most tables have business_id directly (accounts, bank_transactions, transactions, invoices,
-  bills, vendors, customers, accounting_rules, documents, audit_events). transaction_entries,
-  invoice_lines, and bill_lines do NOT — join up to their parent row to scope by business.
-- IMPORTANT — current implementation state: categorization/posting is not wired up yet.
-  Expect most bank_transactions to have status='new' with no matching transactions row, and
-  transaction_entries/accounting_rules to be empty or sparse. Don't assume posted ledger data
-  exists just because bank_transactions do.
-- Cash-basis only: no accrual, depreciation, or deferred-revenue concepts anywhere in this schema.
-"""
-
-SYSTEM_PROMPT = f"""You are a financial analyst assistant for a small business.
-
-Tools:
-- query_database: for ANY data question. Returns JSON rows.
-- get_pnl: for profit/loss, net income, revenue, or expense totals over a period.
-- request_chart: use ONLY when a chart makes the answer clearer than text.
-    * Trend, comparison, ranking, or top-N questions.
-    * You MUST call query_database (or get_pnl) FIRST, then pass its exact JSON
-      output as data_json, plus a description of what to plot.
-    * Do NOT use for simple factual or yes/no questions.
-
-{SCHEMA}
-
-Always filter by the business_id you are given. Be concise.
-"""
-
-_TOOL_REGISTRY = {"query_database": query_database, "get_pnl": get_pnl}
-_agent_model = _haiku.bind_tools([query_database, get_pnl, request_chart])
+# Skill catalog is baked into the system prompt at startup (registry loads once).
+_SYSTEM_PROMPT = system_prompt(registry.catalog())
+_agent_model = _llm.bind_tools(ALL_TOOLS)
+_tool_node = ToolNode(ALL_TOOLS)
 
 
 # ── agent ────────────────────────────────────────────────────────────────
@@ -134,7 +44,7 @@ def agent(state: ChatState, config: RunnableConfig) -> Command:
                 len(state["messages"]), state["business_id"])
 
     response = _agent_model.invoke(
-        [SystemMessage(content=SYSTEM_PROMPT)] + state["messages"],
+        [SystemMessage(content=_SYSTEM_PROMPT)] + state["messages"],
         config=config,
     )
     tool_calls = getattr(response, "tool_calls", None) or []
@@ -148,31 +58,98 @@ def agent(state: ChatState, config: RunnableConfig) -> Command:
 
 # ── run_tools ────────────────────────────────────────────────────────────
 def run_tools(state: ChatState, config: RunnableConfig) -> Command:
-    tc = state["messages"][-1].tool_calls[0]
-    name, args, tc_id = tc["name"], tc["args"], tc["id"]
-    logger.info("[chat.run_tools] tool=%s args_keys=%s", name, list(args.keys()))
+    """Execute every tool call in the last agent message via ToolNode, then
+    route: if the turn asked for a chart, hand off to chart_code_gen; otherwise
+    return the tool results to the agent."""
+    ai_msg = state["messages"][-1]
+    tool_calls = ai_msg.tool_calls
+    logger.info("[chat.run_tools] calls=%s", [tc["name"] for tc in tool_calls])
 
-    if name == "request_chart":
-        logger.info("[chat.run_tools] chart requested desc=%r", args["description"])
+    # ToolNode runs ALL calls (parallel-safe) and injects state/store args.
+    # request_chart is a real tool that returns "chart_requested", so it gets a
+    # ToolMessage here too — that keeps every tool_use paired with a tool_result.
+    result = _tool_node.invoke(state, config)
+    new_messages = result["messages"]
+
+    # WRITE tools (checked first): don't commit here — route to human confirmation.
+    write_call = next((tc for tc in tool_calls if tc["name"] in WRITE_TOOLS), None)
+    if write_call is not None:
+        summary = WRITE_TOOLS[write_call["name"]]["summarize"](state["business_id"], write_call["args"])
+        logger.info("[chat.run_tools] write pending: %s", summary)
         return Command(
-            goto="chart_code_gen",
+            goto="write_confirm",
             update={
-                "chart_description": args["description"],
-                "chart_data": args["data_json"],
-                "chart_retry_count": 0,
-                "chart_error": None,
-                "messages": [ToolMessage(
-                    content="chart_requested", tool_call_id=tc_id, name=name,
-                )],
+                "pending_write": {
+                    "tool": write_call["name"],
+                    "args": write_call["args"],
+                    "summary": summary,
+                },
+                "messages": new_messages,
             },
         )
 
-    tool_fn = _TOOL_REGISTRY[name]
-    result = tool_fn.invoke(args, config=config)
-    logger.info("[chat.run_tools] tool=%s result_len=%d", name, len(result))
+    chart_call = next((tc for tc in tool_calls if tc["name"] == "request_chart"), None)
+    if chart_call is not None:
+        logger.info("[chat.run_tools] chart requested desc=%r", chart_call["args"]["description"])
+        return Command(
+            goto="chart_code_gen",
+            update={
+                "chart_description": chart_call["args"]["description"],
+                "chart_data": chart_call["args"]["data_json"],
+                "chart_retry_count": 0,
+                "chart_error": None,
+                "messages": new_messages,
+            },
+        )
+
+    logger.info("[chat.run_tools] executed=%d results", len(new_messages))
+    return Command(goto="agent", update={"messages": new_messages})
+
+
+# ── write_confirm (INTERRUPT) ────────────────────────────────────────────
+def write_confirm(state: ChatState) -> Command:
+    """Pause and ask the user to approve a pending write before it commits."""
+    pw = state["pending_write"]
+    logger.info("[chat.write_confirm] INTERRUPT tool=%s", pw["tool"])
+    confirmed = interrupt({
+        "type": "write_confirm",
+        "tool": pw["tool"],
+        "summary": pw["summary"],
+    })
+    logger.info("[chat.write_confirm] resumed confirmed=%s", confirmed)
+
+    if confirmed:
+        return Command(goto="write_execute", update={})
+
     return Command(
         goto="agent",
-        update={"messages": [ToolMessage(content=result, tool_call_id=tc_id, name=name)]},
+        update={
+            "pending_write": None,
+            "messages": [HumanMessage(
+                content="[note] The user DECLINED the write. Do not perform it; acknowledge briefly.",
+            )],
+        },
+    )
+
+
+# ── write_execute ────────────────────────────────────────────────────────
+def write_execute(state: ChatState) -> Command:
+    """Perform the confirmed write, then report the outcome back to the agent."""
+    pw = state["pending_write"]
+    try:
+        result = WRITE_TOOLS[pw["tool"]]["execute"](state["business_id"], pw["args"])
+    except Exception as e:
+        result = f"Write failed: {str(e)[:200]}"
+        logger.exception("[chat.write_execute] failed tool=%s", pw["tool"])
+    logger.info("[chat.write_execute] tool=%s result=%s", pw["tool"], result)
+    return Command(
+        goto="agent",
+        update={
+            "pending_write": None,
+            "messages": [HumanMessage(
+                content=f"[note] Write completed. Result: {result}. Tell the user plainly.",
+            )],
+        },
     )
 
 
@@ -207,7 +184,7 @@ Rules:
 
 Return ONLY the Python code. No markdown fences. No explanation."""
 
-    response = _haiku.invoke(prompt, config=config)
+    response = _llm.invoke(prompt, config=config)
     code = response.content.strip()
     if code.startswith("```"):
         code = code.split("\n", 1)[1] if "\n" in code else code
